@@ -12,7 +12,9 @@ const HEADER_ALIASES = {
   no2: ['no2', 'no2ugm3', 'no2ppm', 'no2ppb', 'nitrogendioxide'],
   so2: ['so2', 'so2ugm3', 'so2ppm', 'so2ppb', 'sulfurdioxide'],
   co: ['co', 'comgm3', 'coppm', 'carbonmonoxide'],
-  o3: ['o3', 'ozone', 'o3ugm3', 'o3ppm', 'o3ppb']
+  o3: ['o3', 'ozone', 'o3ugm3', 'o3ppm', 'o3ppb'],
+  latitude: ['latitude', 'lat', 'y', 'gpslat', 'coordlat', 'latdeg'],
+  longitude: ['longitude', 'lon', 'lng', 'long', 'x', 'gpslon', 'coordlon', 'londeg']
 };
 
 // Standard gas molecular weights at 25°C, 101.325 kPa for ppm -> µg/m³
@@ -151,6 +153,23 @@ export function parseAirQualityData(rawText) {
         rowObj[canonical] = null;
         if (missingCounts[canonical] !== undefined) {
           missingCounts[canonical]++;
+        }
+        return;
+      }
+
+      // Check coordinates
+      if (canonical === 'latitude' || canonical === 'longitude') {
+        const num = parseFloat(val);
+        if (isNaN(num)) {
+          rowObj[canonical] = null;
+        } else if (canonical === 'latitude' && (num < -90 || num > 90)) {
+          rowObj[canonical] = null;
+          rowObj._flags.push(`Latitude out of valid range [-90, 90]: ${num}`);
+        } else if (canonical === 'longitude' && (num < -180 || num > 180)) {
+          rowObj[canonical] = null;
+          rowObj._flags.push(`Longitude out of valid range [-180, 180]: ${num}`);
+        } else {
+          rowObj[canonical] = num;
         }
         return;
       }

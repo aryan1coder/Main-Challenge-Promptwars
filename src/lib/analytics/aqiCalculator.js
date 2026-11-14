@@ -71,6 +71,14 @@ export function calculateSubIndex(concentration, pollutant = 'pm25') {
 }
 
 /**
+ * Get AQI category object with safe fallback
+ */
+export function getAQICategory(concentration, pollutant = 'pm25') {
+  const res = calculateSubIndex(concentration, pollutant);
+  return res || { subIndex: 0, category: 'Good', color: '#16a34a', pollutant };
+}
+
+/**
  * Determine overall AQI, dominant pollutant, methodology, and CPCB qualifications.
  * 
  * CPCB Rigor Rules:

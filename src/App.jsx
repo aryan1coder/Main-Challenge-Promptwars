@@ -1,14 +1,14 @@
 import { useState, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
-import MetricsGrid from './components/MetricsGrid';
-import AnalyticsCharts from './components/AnalyticsCharts';
-import IngestionPanel from './components/IngestionPanel';
-import HotspotTable from './components/HotspotTable';
-import DataPreviewTable from './components/DataPreviewTable';
-import RoleInterventions from './components/RoleInterventions';
-import BriefingConsole from './components/BriefingConsole';
-import HistoricalComparison from './components/HistoricalComparison';
+import ScreenOverview from './components/screens/ScreenOverview';
+import ScreenDataIngestion from './components/screens/ScreenDataIngestion';
+import ScreenAnalytics from './components/screens/ScreenAnalytics';
+import ScreenMapIntelligence from './components/screens/ScreenMapIntelligence';
+import ScreenHotspots from './components/screens/ScreenHotspots';
+import ScreenDirectives from './components/screens/ScreenDirectives';
+import ScreenAIBriefing from './components/screens/ScreenAIBriefing';
+import ScreenHistory from './components/screens/ScreenHistory';
 import { parseAirQualityData } from './lib/parsers/dataParser';
 import { analyzeAirQualityDataset } from './lib/analytics/statsEngine';
 import { generateGroundedBriefings } from './lib/services/geminiService';
@@ -20,11 +20,14 @@ import './App.css';
 function getInitialBenchmarkState() {
   try {
     const parsed = parseAirQualityData(BENCHMARK_DELHI_SMOG);
-    const computed = analyzeAirQualityDataset(parsed, { title: 'Benchmark: Delhi Winter Smog Episode', isBenchmark: true });
+    const computed = analyzeAirQualityDataset(parsed, {
+      title: 'Benchmark: Delhi Winter Smog Episode',
+      isBenchmark: true
+    });
     return {
       parsed,
       analytics: computed,
-      status: { type: 'success', message: `${parsed.totalRows} benchmark observations loaded` }
+      status: { type: 'success', message: `${parsed.totalRows} observations verified` }
     };
   } catch {
     return {
@@ -43,8 +46,9 @@ export default function App() {
   const [analytics, setAnalytics] = useState(initialState.analytics);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [parseError, setParseError] = useState('');
-  
-  // Navigation & Shell State
+
+  // Active Screen: 8 connected screens in Stitch architecture
+  // 'overview' | 'data-ingestion' | 'analytics' | 'map-intelligence' | 'hotspots' | 'directives' | 'ai-briefing' | 'history' | 'standards'
   const [activeSection, setActiveSection] = useState('overview');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -52,16 +56,16 @@ export default function App() {
   const [aiBriefing, setAiBriefing] = useState(null);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiError, setAiError] = useState('');
-  
-  // App status indicator
+
+  // Status indicator
   const [status, setStatus] = useState(initialState.status);
 
-  // Handler for parsing incoming tabular data
+  // Ingestion handler
   const handleDataParsed = useCallback((rawText, title = 'Custom Air Quality Data') => {
     setIsAnalyzing(true);
     setParseError('');
     setDatasetTitle(title);
-    setStatus({ type: 'working', message: 'Parsing & Computing Metrics...' });
+    setStatus({ type: 'working', message: 'Parsing & Normalizing Telemetry...' });
 
     try {
       const isBenchmark = title.toLowerCase().includes('benchmark');
@@ -70,7 +74,7 @@ export default function App() {
 
       setParsedResult(parsed);
       setAnalytics(computedAnalytics);
-      setAiBriefing(null); // Reset AI briefing on new data ingestion
+      setAiBriefing(null);
       setAiError('');
 
       setStatus({
@@ -86,7 +90,7 @@ export default function App() {
     }
   }, []);
 
-  // Handler for live Gemini AI generation
+  // Gemini AI generation handler
   const handleGenerateAI = async () => {
     if (!analytics) return;
     setIsGeneratingAI(true);
@@ -100,17 +104,45 @@ export default function App() {
     } catch (err) {
       console.error('Gemini Synthesis Error:', err);
       setAiError(err.message || 'Failed to communicate with Google Gemini API.');
-      setStatus({ type: 'warning', message: 'AI Synthesis Quota/Key Error' });
+      setStatus({ type: 'warning', message: 'AI Synthesis Quota/Key Notice' });
     } finally {
       setIsGeneratingAI(false);
     }
   };
 
+  const handleExportBriefing = () => {
+    const payload = {
+      timestamp: new Date().toISOString(),
+      datasetTitle,
+      analytics,
+      aiBriefing,
+      compliance: {
+        standard: 'CPCB NAAQS 2026',
+        sufficientHoursRule: analytics?.hoursCovered >= 16,
+        confidenceTier: analytics?.confidenceTier
+      }
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `civic_air_briefing_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Canonicalize section names for backwards compatibility
+  const canonicalSection = (() => {
+    if (activeSection === 'ingestion') return 'data-ingestion';
+    if (activeSection === 'briefings') return 'ai-briefing';
+    return activeSection;
+  })();
+
   return (
     <div className="civic-command-shell">
-      {/* Fixed Left Navigation Sidebar */}
+      {/* Fixed Left Navigation Sidebar (Stitch Aetheris OS) */}
       <Sidebar
-        activeSection={activeSection}
+        activeSection={canonicalSection}
         setActiveSection={setActiveSection}
         isCollapsed={isSidebarCollapsed}
         setIsCollapsed={setIsSidebarCollapsed}
@@ -134,7 +166,7 @@ export default function App() {
           {/* Fictional Benchmark Evaluation Disclaimer */}
           {analytics?.isBenchmark && (
             <div className="alert-banner alert-benchmark-disclaimer" role="note" aria-label="Benchmark Disclaimer">
-              <AlertCircle size={16} className="text-amber-700" aria-hidden="true" />
+              <AlertCircle size={16} className="text-tertiary" aria-hidden="true" />
               <span>
                 <strong>Evaluation Disclaimer:</strong> Benchmark observations are fictional and intended for software evaluation only.
               </span>
@@ -147,120 +179,112 @@ export default function App() {
             </div>
           )}
 
-          {/* Section 1: Command Overview & KPI Grid */}
-          {analytics && (
-            <MetricsGrid
+          {/* 8 Connected Screen Router */}
+          {canonicalSection === 'overview' && (
+            <ScreenOverview
               analytics={analytics}
-              language={language}
+              setActiveSection={setActiveSection}
+              onExport={handleExportBriefing}
             />
           )}
 
-          {/* Section 2: Data Ingestion & Stream Normalization */}
-          <div id="ingestion">
-            <IngestionPanel
+          {canonicalSection === 'data-ingestion' && (
+            <ScreenDataIngestion
+              parsedResult={parsedResult}
+              analytics={analytics}
               onDataParsed={handleDataParsed}
               isAnalyzing={isAnalyzing}
             />
-          </div>
+          )}
 
-          {/* Section 3: Visual Analytics & Time-Series Telemetry */}
-          {analytics && (
-            <AnalyticsCharts
+          {canonicalSection === 'analytics' && (
+            <ScreenAnalytics
               analytics={analytics}
               parsedResult={parsedResult}
             />
           )}
 
-          {/* Section 4: Spatial Hotspots & Raw Data Inspection */}
-          {analytics && (
-            <div id="hotspots" className="hotspots-section-wrapper">
-              <div className="civic-grid-two-col">
-                <HotspotTable
-                  hotspots={analytics.hotspots}
-                  anomalies={analytics.anomaliesSummary.recent}
-                />
-                <DataPreviewTable
-                  parsedResult={parsedResult}
-                />
-              </div>
-            </div>
+          {canonicalSection === 'map-intelligence' && (
+            <ScreenMapIntelligence
+              analytics={analytics}
+              onDataParsed={handleDataParsed}
+            />
           )}
 
-          {/* Section 5: Role-Tailored Operational Directives */}
-          {analytics && (
-            <div id="directives">
-              <RoleInterventions
-                aiBriefing={aiBriefing}
-                analytics={analytics}
-              />
-            </div>
+          {canonicalSection === 'hotspots' && (
+            <ScreenHotspots
+              analytics={analytics}
+              setActiveSection={setActiveSection}
+            />
           )}
 
-          {/* Section 6: AI Briefing Console & Bilingual Advisories */}
-          {analytics && (
-            <div id="briefings">
-              <BriefingConsole
-                aiBriefing={aiBriefing}
-                analytics={analytics}
-                language={language}
-                setLanguage={setLanguage}
-                onGenerateAI={handleGenerateAI}
-                isGenerating={isGeneratingAI}
-                aiError={aiError}
-              />
-            </div>
+          {canonicalSection === 'directives' && (
+            <ScreenDirectives
+              analytics={analytics}
+              aiBriefing={aiBriefing}
+            />
           )}
 
-          {/* Section 7: Historical Comparison & Trend Baseline */}
-          {analytics && (
-            <div id="history">
-              <HistoricalComparison
-                analytics={analytics}
-                aiBriefing={aiBriefing}
-                datasetTitle={datasetTitle}
-              />
-            </div>
+          {canonicalSection === 'ai-briefing' && (
+            <ScreenAIBriefing
+              aiBriefing={aiBriefing}
+              analytics={analytics}
+              language={language}
+              setLanguage={setLanguage}
+              onGenerateAI={handleGenerateAI}
+              isGenerating={isGeneratingAI}
+              aiError={aiError}
+            />
           )}
 
-          {/* Section 8: Regulatory Standards & CPCB Compliance Architecture */}
-          <section id="standards" className="civic-card standards-reference-card" aria-labelledby="standards-heading">
-            <div className="card-header">
-              <div className="card-title-group">
-                <BookOpen size={20} className="card-icon text-civic-blue" aria-hidden="true" />
-                <h2 id="standards-heading" className="card-title">Regulatory Framework & Scientific Standards</h2>
-              </div>
-              <span className="badge badge-verified">
-                <CheckCircle2 size={14} aria-hidden="true" />
-                CPCB NAAQS 2026 Reference
-              </span>
-            </div>
+          {canonicalSection === 'history' && (
+            <ScreenHistory
+              analytics={analytics}
+              aiBriefing={aiBriefing}
+              datasetTitle={datasetTitle}
+            />
+          )}
 
-            <div className="standards-grid">
-              <div className="standard-box">
-                <h4>Linear Interpolation Formula</h4>
-                <p>Calculates sub-indices deterministically across Indian National Ambient Air Quality Standards breakpoints:</p>
-                <code>Ip = [ (Ihi - Ilo) / (BPhi - BPlo) ] * (Cp - BPlo) + Ilo</code>
+          {canonicalSection === 'standards' && (
+            <section id="standards" className="civic-card standards-reference-card" aria-labelledby="standards-heading">
+              <div className="card-header">
+                <div className="card-title-group">
+                  <BookOpen size={20} className="card-icon text-primary" aria-hidden="true" />
+                  <h2 id="standards-heading" className="card-title">Regulatory Framework &amp; Scientific Standards</h2>
+                </div>
+                <span className="badge badge-verified">
+                  <CheckCircle2 size={14} aria-hidden="true" />
+                  CPCB NAAQS 2026 Reference
+                </span>
               </div>
-              <div className="standard-box">
-                <h4>Temporal Sufficiency (≥16h Rule)</h4>
-                <p>CPCB regulatory guidelines require a minimum of 16 hourly data points in a 24-hour cycle. Datasets under 16 hours are classified as indicative sub-indices.</p>
+
+              <div className="standards-grid">
+                <div className="standard-box">
+                  <h4>Linear Interpolation Formula</h4>
+                  <p>Calculates sub-indices deterministically across Indian National Ambient Air Quality Standards breakpoints:</p>
+                  <code>Ip = [ (Ihi - Ilo) / (BPhi - BPlo) ] * (Cp - BPlo) + Ilo</code>
+                </div>
+                <div className="standard-box">
+                  <h4>Temporal Sufficiency (&ge;16h Rule)</h4>
+                  <p>CPCB regulatory guidelines require a minimum of 16 hourly data points in a 24-hour cycle. Datasets under 16 hours are classified as indicative sub-indices.</p>
+                </div>
+                <div className="standard-box">
+                  <h4>Multi-Parameter Rule</h4>
+                  <p>An official National AQI mandates at least 3 criteria pollutants (with at least PM2.5 or PM10). Datasets with fewer parameters are explicitly labeled Indicative Sub-Indices.</p>
+                </div>
+                <div className="standard-box">
+                  <h4>Empirical Non-Causal Grounding</h4>
+                  <p>Historical shifts reflect observed sensor differences between monitoring sessions. They do not claim definitive causal proof of municipal intervention efficacy.</p>
+                </div>
               </div>
-              <div className="standard-box">
-                <h4>Multi-Parameter Rule</h4>
-                <p>An official National AQI mandates at least 3 criteria pollutants (with at least PM2.5 or PM10). Datasets with fewer parameters are explicitly labeled Indicative Sub-Indices.</p>
-              </div>
-              <div className="standard-box">
-                <h4>Empirical Non-Causal Grounding</h4>
-                <p>Historical shifts reflect observed sensor differences between monitoring sessions. They do not claim definitive causal proof of municipal intervention efficacy.</p>
-              </div>
-            </div>
-          </section>
+            </section>
+          )}
 
           {/* Command Center Footer */}
           <footer className="civic-command-footer" role="contentinfo">
             <div className="footer-content">
               <div className="footer-left">
-                <Shield size={16} className="text-civic-blue" aria-hidden="true" />
+                <Shield size={16} className="text-primary" aria-hidden="true" />
                 <span>Civic Air Quality Briefing Studio | PromptWars Evaluation Platform</span>
               </div>
               <div className="footer-right">

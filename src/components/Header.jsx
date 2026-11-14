@@ -1,60 +1,116 @@
-import { Globe, Activity, Layers } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import {
+  Globe,
+  Activity,
+  Layers,
+  Search,
+  Clock
+} from 'lucide-react';
 
 export default function Header({
   language,
   setLanguage,
   status,
   confidenceTier,
-  datasetTitle = 'Regional Air Quality Assessment'
+  datasetTitle = 'Regional Air Quality Assessment',
+  onSearch
 }) {
+  const [timeString, setTimeString] = useState('');
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setTimeString(
+        now.toLocaleTimeString('en-US', {
+          hour12: false,
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        }) + ' UTC+05:30'
+      );
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <header className="civic-top-header" role="banner">
-      <div className="header-left-group">
-        <div className="workspace-title-capsule">
-          <Layers size={16} className="text-civic-blue" aria-hidden="true" />
-          <span className="workspace-label">Incident Session:</span>
-          <strong className="workspace-name">{datasetTitle}</strong>
+    <header className="civic-header-stitch" role="banner">
+      {/* Left: Global Search & Active Incident Capsule */}
+      <div className="header-left-cluster">
+        <div className="header-search-bar">
+          <Search size={15} className="text-on-surface-variant shrink-0" />
+          <input
+            type="text"
+            placeholder="Search stations, wards, pollutants..."
+            className="search-input-field"
+            onChange={(e) => onSearch && onSearch(e.target.value)}
+          />
+        </div>
+
+        <div className="session-title-capsule hidden xl:flex">
+          <Layers size={14} className="text-primary shrink-0" />
+          <span className="session-prefix">Active Telemetry:</span>
+          <strong className="session-name">{datasetTitle}</strong>
         </div>
       </div>
 
-      <div className="header-right-group">
-        {/* Data Confidence Indicator */}
+      {/* Right: Telemetry fidelity, Live clock, Language toggle, notifications, profile */}
+      <div className="header-right-cluster">
+        {/* Real-time Clock */}
+        <div className="header-clock-capsule hidden md:flex">
+          <Clock size={13} className="text-secondary shrink-0" />
+          <span className="font-mono text-xs">{timeString || '14:30:00 UTC+05:30'}</span>
+        </div>
+
+        {/* Data Fidelity / Confidence Tier */}
         {confidenceTier && (
           <div
-            className={`top-confidence-badge tier-${confidenceTier.toLowerCase()}`}
-            title="Data Completeness & Reliability Tier per CPCB Rigor Rules"
+            className={`header-confidence-pill tier-${confidenceTier.toLowerCase()}`}
+            title="Statistical completeness & verification level"
           >
-            <Activity size={14} aria-hidden="true" />
+            <Activity size={13} />
             <span>Fidelity: <strong>{confidenceTier}</strong></span>
           </div>
         )}
 
         {/* Operational Status Dot */}
-        <div className="top-status-indicator" role="status" aria-live="polite">
+        <div className="header-status-indicator" role="status" aria-live="polite">
           <span className={`status-dot status-${status.type}`}></span>
           <span className="status-label">{status.message}</span>
         </div>
 
         {/* Bilingual Switcher */}
-        <div className="top-lang-switcher" role="group" aria-label="Advisory Language">
-          <Globe size={15} className="text-civic-slate" aria-hidden="true" />
+        <div className="header-language-toggle">
+          <Globe size={14} className="text-on-surface-variant shrink-0" />
           <button
             type="button"
-            className={`lang-btn ${language === 'en' ? 'active' : ''}`}
+            className={`lang-switch-btn ${language === 'en' ? 'active' : ''}`}
             onClick={() => setLanguage('en')}
-            aria-label="Switch language to English"
+            aria-label="Switch to English"
           >
             EN
           </button>
-          <span className="lang-divider">|</span>
+          <span className="lang-pipe">/</span>
           <button
             type="button"
-            className={`lang-btn ${language === 'hi' ? 'active' : ''}`}
+            className={`lang-switch-btn ${language === 'hi' ? 'active' : ''}`}
             onClick={() => setLanguage('hi')}
-            aria-label="Switch language to Hindi"
+            aria-label="Switch to Hindi"
           >
-            हिंदी
+            हिन्दी
           </button>
+        </div>
+
+        {/* User / Station Operator Badge */}
+        <div className="operator-profile-badge hidden lg:flex">
+          <div className="operator-avatar">
+            <span>CA</span>
+          </div>
+          <div className="operator-details">
+            <span className="operator-name">Director of Environment</span>
+            <span className="operator-role">Central Command</span>
+          </div>
         </div>
       </div>
     </header>

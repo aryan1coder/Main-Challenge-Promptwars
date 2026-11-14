@@ -100,11 +100,19 @@ export function analyzeAirQualityDataset(parsedResult, metadata = {}) {
         pm25Vals: [],
         pm10Vals: [],
         no2Vals: [],
+        latitudes: [],
+        longitudes: [],
         totalReadings: 0,
         severeExceedances: 0 // PM2.5 > 120 ug/m3
       };
     }
     wardGroups[ward].totalReadings++;
+    if (r.latitude !== null && r.latitude !== undefined && !isNaN(r.latitude)) {
+      wardGroups[ward].latitudes.push(r.latitude);
+    }
+    if (r.longitude !== null && r.longitude !== undefined && !isNaN(r.longitude)) {
+      wardGroups[ward].longitudes.push(r.longitude);
+    }
     if (r.pm25 !== null && r.pm25 !== undefined) {
       wardGroups[ward].pm25Vals.push(r.pm25);
       if (r.pm25 > 120) {
@@ -121,10 +129,19 @@ export function analyzeAirQualityDataset(parsedResult, metadata = {}) {
 
   const hotspots = Object.values(wardGroups).map(w => {
     const stats = computeSeriesStats(w.pm25Vals);
+    const pm10Stats = computeSeriesStats(w.pm10Vals);
+    const no2Stats = computeSeriesStats(w.no2Vals);
+    const latitude = w.latitudes.length > 0 ? parseFloat((w.latitudes.reduce((a, b) => a + b, 0) / w.latitudes.length).toFixed(4)) : null;
+    const longitude = w.longitudes.length > 0 ? parseFloat((w.longitudes.reduce((a, b) => a + b, 0) / w.longitudes.length).toFixed(4)) : null;
+
     return {
       ward: w.name,
       meanPM25: stats.mean,
       maxPM25: stats.max,
+      meanPM10: pm10Stats.mean,
+      meanNO2: no2Stats.mean,
+      latitude,
+      longitude,
       readingsCount: w.totalReadings,
       severeExceedances: w.severeExceedances,
       exceedanceRate: stats.count > 0 ? parseFloat(((w.severeExceedances / stats.count) * 100).toFixed(1)) : 0
@@ -133,6 +150,7 @@ export function analyzeAirQualityDataset(parsedResult, metadata = {}) {
 
   // Sort hotspots by highest mean PM2.5
   hotspots.sort((a, b) => (b.meanPM25 || 0) - (a.meanPM25 || 0));
+  const hasCoordinates = hotspots.some(h => h.latitude !== null && h.longitude !== null);
 
   // Diurnal / Hourly Trend Analysis
   const hourlyBuckets = Array.from({ length: 24 }, (_, i) => ({ hour: i, vals: [] }));
@@ -211,6 +229,7 @@ export function analyzeAirQualityDataset(parsedResult, metadata = {}) {
     aqi: aqiResult,
     hotspots,
     primaryHotspot: hotspots[0] || null,
+    hasCoordinates,
     diurnalTrends,
     peakExposureWindow: peakHour !== null ? `${String(peakHour).padStart(2, '0')}:00 - ${String(peakHour + 1).padStart(2, '0')}:00` : 'Insufficient hourly timestamps',
     // 4 Confidence Dimensions:

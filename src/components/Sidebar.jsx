@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
-  Database,
+  UploadCloud,
   TrendingUp,
+  MapPin,
   Flame,
   ShieldAlert,
   Sparkles,
   History,
-  Info,
+  BookOpen,
   ChevronLeft,
   ChevronRight,
-  Wind,
-  CheckCircle2
+  Wind
 } from 'lucide-react';
 
 export default function Sidebar({
@@ -24,7 +24,6 @@ export default function Sidebar({
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Close mobile sidebar on window resize to desktop
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth > 1024) {
@@ -35,26 +34,21 @@ export default function Sidebar({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const navItems = [
-    { id: 'overview', label: 'Command Overview', icon: LayoutDashboard },
-    { id: 'ingestion', label: 'Data Ingestion', icon: Database },
-    { id: 'analytics', label: 'Analytics & Trends', icon: TrendingUp },
-    { id: 'hotspots', label: 'Spatial Hotspots', icon: Flame },
-    { id: 'directives', label: 'Operational Directives', icon: ShieldAlert },
-    { id: 'briefings', label: 'AI Briefing Workspace', icon: Sparkles },
-    { id: 'history', label: 'Historical Archive', icon: History },
-    { id: 'standards', label: 'CPCB Standards', icon: Info }
+  const navModules = [
+    { id: 'overview', label: 'Overview', icon: LayoutDashboard, tag: '01' },
+    { id: 'data-ingestion', label: 'Data Ingestion', icon: UploadCloud, tag: '02' },
+    { id: 'analytics', label: 'Analytics', icon: TrendingUp, tag: '03' },
+    { id: 'map-intelligence', label: 'Map Intelligence', icon: MapPin, tag: '04' },
+    { id: 'hotspots', label: 'Hotspots', icon: Flame, tag: '05' },
+    { id: 'directives', label: 'Directives', icon: ShieldAlert, tag: '06' },
+    { id: 'ai-briefing', label: 'AI Briefing', icon: Sparkles, tag: '07' },
+    { id: 'history', label: 'History', icon: History, tag: '08' },
+    { id: 'standards', label: 'CPCB Standards', icon: BookOpen, tag: 'REG' }
   ];
 
   const handleNavClick = (id) => {
     setActiveSection(id);
     setMobileOpen(false);
-
-    // Smooth scroll to the target element if on page
-    const el = document.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
   };
 
   return (
@@ -80,84 +74,82 @@ export default function Sidebar({
         <span>Menu</span>
       </button>
 
-      {/* Sidebar Container */}
+      {/* Stitch Aetheris OS Sidebar */}
       <aside
-        className={`civic-sidebar ${isCollapsed ? 'collapsed' : ''} ${mobileOpen ? 'mobile-open' : ''}`}
-        aria-label="Primary Platform Navigation"
+        className={`civic-sidebar-stitch ${isCollapsed ? 'collapsed' : ''} ${mobileOpen ? 'mobile-open' : ''}`}
+        aria-label="Platform Navigation"
       >
         {/* Brand Header */}
-        <div className="sidebar-brand-header">
-          <div className="brand-badge-container">
-            <div className="brand-icon-box">
-              <Wind size={20} className="text-civic-blue-light" aria-hidden="true" />
+        <div className="sidebar-brand-box">
+          <div className="brand-logo-cluster">
+            <div className="brand-pulse-logo">
+              <Wind size={22} className="text-primary" />
             </div>
             {!isCollapsed && (
-              <div className="brand-text-block">
-                <span className="brand-core-title">CIVIC AIR</span>
-                <span className="brand-core-subtitle">Command Center</span>
+              <div className="brand-title-group">
+                <span className="brand-name">CIVIC AIR</span>
+                <span className="brand-subline">Urban Intelligence OS</span>
               </div>
             )}
           </div>
 
           <button
             type="button"
-            className="sidebar-collapse-btn"
+            className="sidebar-collapse-toggle-btn"
             onClick={() => setIsCollapsed(!isCollapsed)}
-            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+            aria-label={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
           >
             {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           </button>
         </div>
 
-        {/* Live Operational Status Capsule */}
-        {!isCollapsed && (
-          <div className="sidebar-status-capsule">
-            <div className="status-live-pulse">
-              <span className="pulse-dot"></span>
-              <span className="pulse-label">Telemetry Live</span>
-            </div>
-            <div className="status-sub-metric">
-              <span>{totalObservations} observations</span>
-              <span className={`capsule-tier-tag tier-${confidenceTier.toLowerCase()}`}>
-                {confidenceTier}
-              </span>
-            </div>
+        {/* Navigation Modules */}
+        <div className="sidebar-nav-scroll">
+          <div className="nav-group-header">
+            {!isCollapsed && <span>Operational Modules</span>}
           </div>
-        )}
 
-        {/* Primary Navigation Links */}
-        <nav className="sidebar-nav-list" role="navigation">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeSection === item.id;
+          <nav className="sidebar-nav-items">
+            {navModules.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeSection === item.id;
 
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
-                onClick={() => handleNavClick(item.id)}
-                title={isCollapsed ? item.label : undefined}
-                aria-current={isActive ? 'page' : undefined}
-              >
-                <Icon size={18} className="nav-icon" aria-hidden="true" />
-                {!isCollapsed && <span className="nav-label">{item.label}</span>}
-                {!isCollapsed && isActive && <span className="nav-active-pill" />}
-              </button>
-            );
-          })}
-        </nav>
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`nav-module-link ${isActive ? 'active' : ''}`}
+                  onClick={() => handleNavClick(item.id)}
+                  title={item.label}
+                  aria-current={isActive ? 'page' : undefined}
+                >
+                  <Icon size={18} className="nav-icon shrink-0" />
+                  {!isCollapsed && (
+                    <>
+                      <span className="nav-label">{item.label}</span>
+                      <span className="nav-tag font-mono">{item.tag}</span>
+                    </>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
 
-        {/* Sidebar Footer with Regulatory & Engine Specs */}
+        {/* Sidebar Status Footer */}
         {!isCollapsed && (
-          <div className="sidebar-footer-specs">
-            <div className="specs-row">
-              <CheckCircle2 size={13} className="text-emerald-500" />
-              <span>CPCB NAAQS 2026 Engine</span>
-            </div>
-            <div className="specs-subtext">
-              Deterministic Math + Gemini 1.5 Flash
+          <div className="sidebar-footer-telemetry">
+            <div className="telemetry-box-glass">
+              <div className="telemetry-status-row">
+                <span className="telemetry-ping"></span>
+                <span className="telemetry-text">Sensor Net v4.2</span>
+                <span className="telemetry-badge-secure">SECURE</span>
+              </div>
+              <div className="telemetry-metrics-line">
+                <span>{totalObservations} Staged Records</span>
+                <span className="confidence-pill">{confidenceTier}</span>
+              </div>
             </div>
           </div>
         )}
