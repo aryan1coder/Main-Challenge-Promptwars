@@ -18,7 +18,8 @@ export function computeSeriesStats(values) {
       p95: null,
       min: null,
       max: null,
-      stdDev: null
+      stdDev: null,
+      coefVariation: null
     };
   }
 
@@ -40,6 +41,7 @@ export function computeSeriesStats(values) {
   // Variance & StdDev
   const variance = valid.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / valid.length;
   const stdDev = parseFloat(Math.sqrt(variance).toFixed(2));
+  const coefVariation = mean > 0 ? parseFloat(((stdDev / mean) * 100).toFixed(1)) : 0;
 
   return {
     count: valid.length,
@@ -48,14 +50,15 @@ export function computeSeriesStats(values) {
     p95,
     min: valid[0],
     max: valid[valid.length - 1],
-    stdDev
+    stdDev,
+    coefVariation
   };
 }
 
 /**
  * Analyze an entire parsed dataset and extract all civic intelligence metrics.
  */
-export function analyzeAirQualityDataset(parsedResult) {
+export function analyzeAirQualityDataset(parsedResult, metadata = {}) {
   const { rows, totalRows, missingCounts, anomalies, totalAnomaliesCount } = parsedResult;
 
   const pollutants = ['pm25', 'pm10', 'no2', 'so2', 'co', 'o3'];
@@ -70,12 +73,22 @@ export function analyzeAirQualityDataset(parsedResult) {
     }
   });
 
+  // Calculate distinct hours covered
+  const hoursSet = new Set();
+  rows.forEach(r => {
+    if (r.timestamp) {
+      const match = r.timestamp.match(/(\d{1,2}):\d{2}/) || r.timestamp.match(/T(\d{2}):/);
+      if (match) hoursSet.add(match[1]);
+    }
+  });
+  const hoursCovered = hoursSet.size > 0 ? hoursSet.size : Math.min(24, totalRows);
+
   // Calculate overall AQI based on available means
   const meansMap = {};
   Object.keys(pollutantStats).forEach(p => {
     meansMap[p] = pollutantStats[p].mean;
   });
-  const aqiResult = determineOverallAQI(meansMap);
+  const aqiResult = determineOverallAQI(meansMap, { hoursCovered, totalObservations: totalRows });
 
   // Group by Ward/Station to identify spatial Hotspots
   const wardGroups = {};
@@ -125,7 +138,6 @@ export function analyzeAirQualityDataset(parsedResult) {
   const hourlyBuckets = Array.from({ length: 24 }, (_, i) => ({ hour: i, vals: [] }));
   rows.forEach(r => {
     if (r.timestamp && r.pm25 !== null && r.pm25 !== undefined) {
-      // Parse hour from ISO string or time string
       const match = r.timestamp.match(/(\d{1,2}):\d{2}/) || r.timestamp.match(/T(\d{2}):/);
       if (match) {
         const hr = parseInt(match[1], 10);
@@ -152,12 +164,37 @@ export function analyzeAirQualityDataset(parsedResult) {
     }
   });
 
-  // Data completeness & Uncertainty Flagging
+  // Four Distinct Dimensions of Data Quality & Confidence:
+  // 1. Data Completeness
   const totalExpectedCells = totalRows * (availablePollutants.length || 1);
   const totalMissing = availablePollutants.reduce((sum, p) => sum + (missingCounts[p] || 0), 0);
   const completeness = totalExpectedCells > 0 
     ? Math.max(0, parseFloat((((totalExpectedCells - totalMissing) / totalExpectedCells) * 100).toFixed(1)))
     : 100;
+
+  // 2. Data Consistency (based on coefficient of variation)
+  const pm25CV = pollutantStats?.pm25?.coefVariation || 0;
+  let consistency = 'Consistent Diurnal Variation';
+  if (pm25CV > 75) {
+    consistency = 'High Variance / Extreme Fluctuations';
+  } else if (pm25CV > 40) {
+    consistency = 'Moderate Diurnal Variance';
+  }
+
+  // 3. Sensor Reliability (based on anomaly rate)
+  const anomalyRate = totalRows > 0 ? (totalAnomaliesCount / totalRows) * 100 : 0;
+  let sensorReliability = 'High (Zero Hardware Faults Flagged)';
+  if (anomalyRate > 15) {
+    sensorReliability = 'Degraded (Multiple Flatlines / Dropouts)';
+  } else if (totalAnomaliesCount > 0) {
+    sensorReliability = `Moderate (${totalAnomaliesCount} Anomaly Events Screened)`;
+  }
+
+  // 4. Source Authenticity
+  const isBenchmark = metadata.isBenchmark || (metadata.title && metadata.title.toLowerCase().includes('benchmark'));
+  const sourceAuthenticity = isBenchmark
+    ? 'Fictional Benchmark Dataset (For Software Evaluation Only)'
+    : 'User-Supplied External Monitoring Stream';
 
   let confidenceTier = 'HIGH';
   if (completeness < 70 || totalAnomaliesCount > 10) {
@@ -168,6 +205,7 @@ export function analyzeAirQualityDataset(parsedResult) {
 
   return {
     totalRows,
+    hoursCovered,
     availablePollutants,
     pollutantStats,
     aqi: aqiResult,
@@ -175,7 +213,12 @@ export function analyzeAirQualityDataset(parsedResult) {
     primaryHotspot: hotspots[0] || null,
     diurnalTrends,
     peakExposureWindow: peakHour !== null ? `${String(peakHour).padStart(2, '0')}:00 - ${String(peakHour + 1).padStart(2, '0')}:00` : 'Insufficient hourly timestamps',
+    // 4 Confidence Dimensions:
     completeness,
+    consistency,
+    sensorReliability,
+    sourceAuthenticity,
+    isBenchmark,
     confidenceTier,
     totalMissing,
     missingCounts,

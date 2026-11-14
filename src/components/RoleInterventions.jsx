@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ShieldAlert, Building2, School, CheckSquare, FileCheck2 } from 'lucide-react';
+import { ShieldAlert, Building2, School, CheckSquare, FileCheck2, AlertCircle } from 'lucide-react';
 
 export default function RoleInterventions({ aiBriefing, analytics }) {
   const [activeRole, setActiveRole] = useState('ward'); // 'ward' | 'housing' | 'school'
@@ -14,66 +14,67 @@ export default function RoleInterventions({ aiBriefing, analytics }) {
 
   // AI-generated data if available
   const aiData = aiBriefing?.data;
+  const isAIGenerated = !!aiData;
 
   // Deterministic rule-based baseline fallback (calibrated strictly by AQI)
   const fallbackDirectives = {
     ward: {
       title: 'Ward Municipal Enforcement Officer',
-      priority: aqi > 300 ? 'CRITICAL EMERGENCY' : aqi > 200 ? 'HIGH ENFORCEMENT' : 'ROUTINE MONITORING',
+      priority: aqi > 300 ? 'SUGGESTED ESCALATION - HIGH' : aqi > 200 ? 'ELEVATED SURVEILLANCE' : 'ROUTINE MONITORING',
       actions: aqi > 300 ? [
-        `Deploy anti-smog mist guns along main transit arteries in ${primaryWard}`,
-        `Halt non-essential construction and demolition activities in high-exceedance corridors`,
-        `Mandate mechanical sweeping and water sprinkling along unpaved road shoulders`,
-        `Reroute heavy commercial diesel transport away from sensitive residential sectors`
+        `Consider deploying anti-smog mist guns along main transit corridors in ${primaryWard}`,
+        `Recommend temporary construction dust control inspections and sweeping intensifying`,
+        `Mandate water sprinkling along unpaved road shoulders and transit crossings`,
+        `Evaluate heavy commercial diesel transport diversions in coordination with traffic police`
       ] : [
         `Routine dust suppression along major commercial corridors in ${primaryWard}`,
-        `Verify emission compliance of local diesel backup generators`,
-        `Inspect localized waste burning hotspots`
+        `Verify emission compliance of local commercial diesel generators`,
+        `Maintain localized waste burning surveillance in open sectors`
       ],
       directive: aqi > 300 
-        ? `Invoke Graded Response Action Plan (GRAP Stage IV). Issue immediate work-suspension notices to active construction sites in ${primaryWard}.`
-        : `Enforce municipal dust control bylaws. Maintain continuous surveillance on road sweeping schedules.`,
+        ? `Suggested Graded Response Action Plan (GRAP Stage IV) Escalation Consideration. Requires formal competent-authority verification prior to issuing statutory work-suspension orders.`
+        : `Enforce standard municipal dust control bylaws. Maintain routine mechanical sweeping schedules.`,
       evidence: `Triggered by Mean PM2.5 of ${meanVal} µg/m³ and Peak concentration of ${peakVal} µg/m³ recorded in ${primaryWard}.`
     },
     housing: {
       title: 'Housing Society & Facility Manager',
-      priority: aqi > 300 ? 'HIGH HAZARD' : aqi > 200 ? 'ELEVATED' : 'STANDARD',
+      priority: aqi > 300 ? 'HIGH EXPOSURE ADVISORY' : aqi > 200 ? 'ELEVATED PRECAUTION' : 'STANDARD SCHEDULE',
       actions: aqi > 200 ? [
-        `Seal fresh-air ventilation dampers during peak morning hours (${analytics.peakExposureWindow})`,
-        `Inspect and replace central HVAC filters with MERV-13 or HEPA standard media`,
-        `Issue circular advising vulnerable residents (seniors, asthmatics) to remain indoors`,
-        `Suspend outdoor maintenance, landscaping, and leaf-blowing operations`
+        `Seal fresh-air ventilation dampers during peak diurnal window (${analytics.peakExposureWindow})`,
+        `Inspect and service central HVAC filters (recommend MERV-13 media where supported)`,
+        `Issue resident circular advising vulnerable groups (seniors, asthmatics) to minimize outdoor exposure`,
+        `Suspend outdoor leaf-blowing and motorized landscaping during morning peak hours`
       ] : [
         `Schedule outdoor recreation outside of peak morning pollution windows`,
-        `Maintain HVAC air filtration at standard efficiency`,
+        `Maintain HVAC air filtration at standard building efficiency`,
         `Keep common area windows closed during early morning hours`
       ],
       directive: aqi > 200
-        ? `Enforce indoor air quality protection protocols across residential towers. Operate indoor air purifiers in community halls and gyms.`
-        : `Standard residential ventilation schedule. Inform residents of current air quality status.`,
+        ? `Advisory facility guidance: operate indoor filtration units in community halls and common areas. Inform residents of current air quality status.`
+        : `Standard residential ventilation schedule. Maintain general environmental awareness.`,
       evidence: `Calibrated for diurnal peak window of ${analytics.peakExposureWindow} with ambient AQI ${aqi} (${aqiCat}).`
     },
     school: {
       title: 'School Administrator & Principal',
-      priority: aqi > 300 ? 'CRITICAL - HEALTH EMERGENCY' : aqi > 200 ? 'HIGH RESTRICTION' : 'NORMAL SCHEDULE',
+      priority: aqi > 300 ? 'URGENT HEALTH ADVISORY' : aqi > 200 ? 'ACTIVITY RESTRICTION' : 'NORMAL SCHEDULE',
       actions: aqi > 250 ? [
-        `Cancel all outdoor morning assemblies and physical education classes immediately`,
-        `Confine all student athletic and recreational activities to enclosed, air-filtered spaces`,
-        `Mandate N95 or well-fitting protective masks for students during commute hours`,
-        `Alert school nurse and first-aid staff for proactive respiratory symptom monitoring`
+        `Consider shifting outdoor morning assembly and physical education classes indoors`,
+        `Restrict strenuous outdoor sports and athletic exertion for all students`,
+        `Advise well-fitting protective masks for students during commute intervals`,
+        `Alert school nursing staff for proactive observation of students with respiratory history`
       ] : [
-        `Limit strenuous outdoor sports for students with diagnosed asthma or respiratory history`,
+        `Permit voluntary indoor alternative for students with diagnosed asthma`,
         `Conduct morning assembly in shaded or sheltered areas`,
-        `Provide hydration and regular indoor rest intervals`
+        `Provide adequate hydration and regular indoor rest intervals`
       ],
       directive: aqi > 250
-        ? `Adopt emergency student protection protocols. Suspend outdoor exposure until ambient PM2.5 falls below 120 µg/m³.`
+        ? `Precautionary student welfare guidance: limit outdoor exertion while ambient PM2.5 exceeds 120 µg/m³. Decisions subject to local education board directives.`
         : `Standard operational protocol with precautionary advisories for sensitive student groups.`,
-      evidence: `Mandated by Ambient PM2.5 exceeding ${meanVal} µg/m³ during school operating hours.`
+      evidence: `Triggered by Ambient PM2.5 exceeding ${meanVal} µg/m³ during school operating hours.`
     }
   };
 
-  const currentRoleData = aiData ? {
+  const roleMap = aiData ? {
     ward: {
       title: 'Ward Municipal Enforcement Officer',
       priority: aiData.wardOfficer?.priority || fallbackDirectives.ward.priority,
@@ -95,7 +96,9 @@ export default function RoleInterventions({ aiBriefing, analytics }) {
       directive: aiData.schoolAdmin?.activityRestrictions || fallbackDirectives.school.directive,
       evidence: aiData.schoolAdmin?.evidenceMetric || fallbackDirectives.school.evidence
     }
-  }[activeRole] : fallbackDirectives[activeRole];
+  } : null;
+
+  const currentRoleData = (roleMap && roleMap[activeRole]) || fallbackDirectives[activeRole] || fallbackDirectives.ward;
 
   return (
     <section className="civic-card interventions-card" aria-labelledby="roles-heading">
@@ -143,21 +146,29 @@ export default function RoleInterventions({ aiBriefing, analytics }) {
           <div>
             <h3 className="role-heading">{currentRoleData.title}</h3>
             <span className="role-source-tag">
-              {aiData ? '✨ Synthesized via Google Gemini 1.5 Flash' : '⚙️ Calibrated by Deterministic Exposure Formula'}
+              {isAIGenerated ? '✨ AI-Generated Advisory Consideration (Grounded Synthesis)' : '⚙️ Deterministic Threshold Trigger (CPCB Breakpoint Rule)'}
             </span>
           </div>
-          <span className={`priority-badge priority-${currentRoleData.priority.toLowerCase().includes('critical') ? 'critical' : 'high'}`}>
-            Priority: {currentRoleData.priority}
+          <span className={`priority-badge priority-${String(currentRoleData?.priority || '').toLowerCase().includes('critical') || String(currentRoleData?.priority || '').toLowerCase().includes('escalation') ? 'critical' : 'high'}`}>
+            Priority: {currentRoleData?.priority || 'STANDARD'}
+          </span>
+        </div>
+
+        {/* Competent-Authority Notice */}
+        <div className="competent-authority-banner">
+          <AlertCircle size={14} className="text-civic-slate" aria-hidden="true" />
+          <span>
+            <strong>Operational Governance:</strong> Prescribed actions represent advisory decision-support considerations. Competent-authority verification is required prior to initiating official regulatory enforcement, school schedule revisions, or traffic diversions.
           </span>
         </div>
 
         <div className="action-checklist-box">
           <h4 className="checklist-heading">
             <CheckSquare size={16} className="text-civic-blue" aria-hidden="true" />
-            Prescribed Intervention Protocols:
+            Operational Checklist & Escalation Considerations:
           </h4>
           <ul className="action-list">
-            {currentRoleData.actions.map((act, i) => (
+            {(Array.isArray(currentRoleData.actions) ? currentRoleData.actions : [currentRoleData.actions]).map((act, i) => (
               <li key={i} className="action-item">
                 <span className="action-check">✔</span>
                 <span>{act}</span>
@@ -167,7 +178,7 @@ export default function RoleInterventions({ aiBriefing, analytics }) {
         </div>
 
         <div className="directive-quote-box">
-          <h4 className="directive-label">Administrative Mandate / Directive:</h4>
+          <h4 className="directive-label">Administrative Guidance / Policy Consideration:</h4>
           <p className="directive-text">"{currentRoleData.directive}"</p>
         </div>
 

@@ -101,8 +101,8 @@ export default function HistoricalComparison({ analytics, aiBriefing, datasetTit
               <div className="delta-metric-card">
                 <span className="delta-label">$\Delta$ Mean PM2.5 Concentration</span>
                 <div className="delta-value-row">
-                  <span className={`delta-number ${comparisonResult.deltaMeanPM25 < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {comparisonResult.deltaMeanPM25 > 0 ? `+${comparisonResult.deltaMeanPM25}` : comparisonResult.deltaMeanPM25} µg/m³
+                  <span className={`delta-number ${comparisonResult.deltaMeanPM25 !== null && comparisonResult.deltaMeanPM25 < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {comparisonResult.deltaMeanPM25 !== null ? (comparisonResult.deltaMeanPM25 > 0 ? `+${comparisonResult.deltaMeanPM25} µg/m³` : `${comparisonResult.deltaMeanPM25} µg/m³`) : 'N/A'}
                   </span>
                   {comparisonResult.percentChangePM25 !== null && (
                     <span className={`delta-pct-pill ${comparisonResult.percentChangePM25 < 0 ? 'pct-improved' : 'pct-worsened'}`}>
