@@ -11,18 +11,18 @@ import { parseAirQualityData } from './lib/parsers/dataParser';
 import { analyzeAirQualityDataset } from './lib/analytics/statsEngine';
 import { generateGroundedBriefings } from './lib/services/geminiService';
 import { BENCHMARK_DELHI_SMOG } from './lib/benchmarkData';
-import { Shield } from 'lucide-react';
+import { Shield, AlertCircle } from 'lucide-react';
 import './App.css';
 
 // Lazy initial load of the benchmark dataset to avoid cascading renders
 function getInitialBenchmarkState() {
   try {
     const parsed = parseAirQualityData(BENCHMARK_DELHI_SMOG);
-    const computed = analyzeAirQualityDataset(parsed);
+    const computed = analyzeAirQualityDataset(parsed, { title: 'Benchmark: Delhi Winter Smog Episode', isBenchmark: true });
     return {
       parsed,
       analytics: computed,
-      status: { type: 'success', message: `${parsed.totalRows} benchmark observations verified` }
+      status: { type: 'success', message: `${parsed.totalRows} benchmark observations loaded` }
     };
   } catch {
     return {
@@ -58,8 +58,9 @@ export default function App() {
     setStatus({ type: 'working', message: 'Parsing & Computing Metrics...' });
 
     try {
+      const isBenchmark = title.toLowerCase().includes('benchmark');
       const parsed = parseAirQualityData(rawText);
-      const computedAnalytics = analyzeAirQualityDataset(parsed);
+      const computedAnalytics = analyzeAirQualityDataset(parsed, { title, isBenchmark });
 
       setParsedResult(parsed);
       setAnalytics(computedAnalytics);
@@ -114,6 +115,16 @@ export default function App() {
           onDataParsed={handleDataParsed}
           isAnalyzing={isAnalyzing}
         />
+
+        {/* Fictional Benchmark Evaluation Disclaimer */}
+        {analytics?.isBenchmark && (
+          <div className="alert-banner alert-benchmark-disclaimer" role="note" aria-label="Benchmark Disclaimer">
+            <AlertCircle size={16} className="text-amber-700" aria-hidden="true" />
+            <span>
+              <strong>Evaluation Disclaimer:</strong> Benchmark observations are fictional and intended for software evaluation only.
+            </span>
+          </div>
+        )}
 
         {parseError && (
           <div className="alert-banner alert-error" role="alert">
