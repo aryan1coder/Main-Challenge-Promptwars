@@ -4,7 +4,9 @@ import {
   Activity,
   Layers,
   Search,
-  Clock
+  Clock,
+  LogOut,
+  ChevronDown
 } from 'lucide-react';
 
 export default function Header({
@@ -13,7 +15,11 @@ export default function Header({
   status,
   confidenceTier,
   datasetTitle = 'Regional Air Quality Assessment',
-  onSearch
+  onSearch,
+  selectedRole = 'ward',
+  currentUser,
+  onOpenWorkspace,
+  onSignOut
 }) {
   const [timeString, setTimeString] = useState('');
 
@@ -102,16 +108,51 @@ export default function Header({
           </button>
         </div>
 
+        {/* Active Role Workspace Pill */}
+        <button
+          type="button"
+          className="header-workspace-pill"
+          onClick={onOpenWorkspace}
+          title="Click to switch operational workspace role"
+        >
+          <span className="workspace-pill-dot"></span>
+          <span className="workspace-pill-role">
+            {selectedRole === 'ward'
+              ? 'Ward Officer'
+              : selectedRole === 'school'
+              ? 'School Admin'
+              : selectedRole === 'housing'
+              ? 'Housing Mgr'
+              : selectedRole === 'citizen'
+              ? 'Citizen Advisory'
+              : 'Command'}
+          </span>
+          <ChevronDown size={12} className="text-on-surface-variant" />
+        </button>
+
         {/* User / Station Operator Badge */}
         <div className="operator-profile-badge hidden lg:flex">
           <div className="operator-avatar">
-            <span>CA</span>
+            <span>{currentUser?.name ? currentUser.name.slice(0, 2).toUpperCase() : 'CA'}</span>
           </div>
           <div className="operator-details">
-            <span className="operator-name">Director of Environment</span>
-            <span className="operator-role">Central Command</span>
+            <span className="operator-name">{currentUser?.name || 'Director of Environment'}</span>
+            <span className="operator-role">
+              {currentUser?.isDemo ? 'Evaluator Demo' : 'Central Command'}
+            </span>
           </div>
         </div>
+
+        {/* Sign Out / Switch Account */}
+        <button
+          type="button"
+          className="header-signout-btn"
+          onClick={onSignOut}
+          title="Sign Out / Switch Account"
+          aria-label="Sign Out"
+        >
+          <LogOut size={15} />
+        </button>
       </div>
     </header>
   );

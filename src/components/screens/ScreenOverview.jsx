@@ -9,6 +9,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { getAQICategory } from '../../lib/analytics/aqiCalculator';
+import { useCountUp } from '../../lib/analytics/useCountUp';
 
 export default function ScreenOverview({
   analytics,
@@ -19,6 +20,12 @@ export default function ScreenOverview({
   const pm25Stats = analytics?.pollutantStats?.pm25 || { mean: 0, max: 0, min: 0 };
   const pm10Stats = analytics?.pollutantStats?.pm10 || { mean: 0, max: 0, min: 0 };
   const no2Stats = analytics?.pollutantStats?.no2 || { mean: 0, max: 0, min: 0 };
+
+  // Smooth Animated Number Counters
+  const animatedAQI = useCountUp(aqi.aqi || 0, 1100);
+  const animatedPM25 = useCountUp(pm25Stats.mean || 0, 900);
+  const animatedPM10 = useCountUp(pm10Stats.mean || 0, 950);
+  const animatedNO2 = useCountUp(no2Stats.mean || 0, 1000);
 
   const topHotspots = useMemo(() => {
     return (analytics?.hotspots || []).slice(0, 3);
@@ -114,7 +121,7 @@ export default function ScreenOverview({
 
             <div className="hero-aqi-digits-row">
               <span className="hero-aqi-number" style={{ color: severityColor }}>
-                {aqi.aqi}
+                {animatedAQI}
               </span>
               <div className="hero-aqi-unit-block">
                 <span className="hero-aqi-label">NAAQS AQI</span>
@@ -194,12 +201,12 @@ export default function ScreenOverview({
                 </span>
               </div>
               <div className="metric-value-row">
-                <span className="metric-hero-num">{pm25Stats.mean || '—'}</span>
+                <span className="metric-hero-num">{pm25Stats.mean ? animatedPM25 : '—'}</span>
                 <span className="metric-unit">µg/m³</span>
               </div>
               <div className="metric-sparkline-box">
                 <svg className="sparkline-svg" viewBox="0 0 100 28" preserveAspectRatio="none">
-                  <path d={sparklineData} fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" />
+                  <path d={sparklineData} fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" className="animated-sparkline-path" />
                 </svg>
               </div>
             </div>
@@ -216,12 +223,12 @@ export default function ScreenOverview({
                 </span>
               </div>
               <div className="metric-value-row">
-                <span className="metric-hero-num">{pm10Stats.mean || '—'}</span>
+                <span className="metric-hero-num">{pm10Stats.mean ? animatedPM10 : '—'}</span>
                 <span className="metric-unit">µg/m³</span>
               </div>
               <div className="metric-sparkline-box">
                 <svg className="sparkline-svg" viewBox="0 0 100 28" preserveAspectRatio="none">
-                  <path d={sparklineData} fill="none" stroke="#ffb95f" strokeWidth="2.5" strokeLinecap="round" />
+                  <path d={sparklineData} fill="none" stroke="#ffb95f" strokeWidth="2.5" strokeLinecap="round" className="animated-sparkline-path" />
                 </svg>
               </div>
             </div>
@@ -238,12 +245,12 @@ export default function ScreenOverview({
                 </span>
               </div>
               <div className="metric-value-row">
-                <span className="metric-hero-num">{no2Stats.mean || '—'}</span>
+                <span className="metric-hero-num">{no2Stats.mean ? animatedNO2 : '—'}</span>
                 <span className="metric-unit">µg/m³</span>
               </div>
               <div className="metric-sparkline-box">
                 <svg className="sparkline-svg" viewBox="0 0 100 28" preserveAspectRatio="none">
-                  <path d={sparklineData} fill="none" stroke="#4cd7f6" strokeWidth="2.5" strokeLinecap="round" />
+                  <path d={sparklineData} fill="none" stroke="#4cd7f6" strokeWidth="2.5" strokeLinecap="round" className="animated-sparkline-path" />
                 </svg>
               </div>
             </div>

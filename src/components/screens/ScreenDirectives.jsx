@@ -8,8 +8,16 @@ import {
   FileCheck
 } from 'lucide-react';
 
-export default function ScreenDirectives({ analytics }) {
-  const [activePersona, setActivePersona] = useState('ward'); // 'ward' | 'school' | 'housing' | 'traffic'
+export default function ScreenDirectives({ analytics, selectedRole = 'ward' }) {
+  const targetPersona = selectedRole === 'citizen' ? 'traffic' : (selectedRole || 'ward');
+  const [prevSelectedRole, setPrevSelectedRole] = useState(selectedRole);
+  const [activePersona, setActivePersona] = useState(targetPersona);
+
+  if (prevSelectedRole !== selectedRole) {
+    setPrevSelectedRole(selectedRole);
+    setActivePersona(targetPersona);
+  }
+
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [completedTasks, setCompletedTasks] = useState({});
 

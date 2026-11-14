@@ -17,8 +17,15 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
 
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY || "");
-export const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const geminiApiKey = (import.meta.env.VITE_GEMINI_API_KEY || "").trim();
+const genAI = geminiApiKey ? new GoogleGenerativeAI(geminiApiKey) : null;
+export const geminiModel = geminiApiKey && genAI ? genAI.getGenerativeModel({ model: "gemini-1.5-flash" }) : null;
+
+export function ensureGeminiConfigured() {
+  if (!geminiModel) {
+    throw new Error("Google Gemini API key is missing. Add VITE_GEMINI_API_KEY to your environment.");
+  }
+}
 
 export function sanitizeInput(text) {
   if (typeof text !== "string") return "";
@@ -28,11 +35,15 @@ export function sanitizeInput(text) {
 export async function generateAIResponse(rawPrompt) {
   const cleanPrompt = sanitizeInput(rawPrompt);
   if (!cleanPrompt) throw new Error("Prompt cannot be empty");
+  ensureGeminiConfigured();
   const result = await geminiModel.generateContent(cleanPrompt);
   return result.response.text();
 }
 
 export async function saveLogToFirestore(collectionName, payload) {
+  if (!db || !collectionName) {
+    throw new Error("Firestore is not configured for this environment.");
+  }
   return await addDoc(collection(db, collectionName), {
     ...payload,
     createdAt: serverTimestamp(),
@@ -40,5 +51,8 @@ export async function saveLogToFirestore(collectionName, payload) {
 }
 
 export async function loginWithGoogle() {
+  if (!auth) {
+    throw new Error("Google authentication is not configured in this environment.");
+  }
   return await signInWithPopup(auth, googleProvider);
 }

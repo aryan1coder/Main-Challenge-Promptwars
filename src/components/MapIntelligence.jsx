@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import maplibreglWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
+
+// Official MapLibre GL worker configuration for Vite
+if (typeof maplibregl.setWorkerUrl === 'function') {
+  maplibregl.setWorkerUrl(maplibreglWorkerUrl || '/maplibre-gl-worker.mjs');
+}
 import {
   MapPin,
   Layers,
@@ -20,6 +26,19 @@ import { BENCHMARK_GEOSPATIAL_DELHI } from '../lib/benchmarkData';
 
 // OpenFreeMap Dark Vector Tile Style
 const OPENFREEMAP_DARK_STYLE = 'https://tiles.openfreemap.org/styles/dark';
+
+// Local Fallback Style for offline / network firewall environments
+const FALLBACK_DARK_STYLE = {
+  version: 8,
+  sources: {},
+  layers: [
+    {
+      id: 'background',
+      type: 'background',
+      paint: { 'background-color': '#080e1d' }
+    }
+  ]
+};
 
 // CPCB Severity Color Mapping
 function getSeverityColor(category) {
@@ -61,10 +80,11 @@ export default function MapIntelligence({ analytics, onDataParsed }) {
   const filteredHotspots = useMemo(() => {
     return hotspots.filter(h => {
       if (severityFilter === 'all') return true;
-      const cat = getAQICategory(h.meanPM25 || 0, 'pm25').category;
+      const val = pollutantFilter === 'pm10' ? h.meanPM10 : pollutantFilter === 'no2' ? h.meanNO2 : h.meanPM25;
+      const cat = getAQICategory(val || 0, pollutantFilter).category;
       return cat.toLowerCase() === severityFilter.toLowerCase();
     });
-  }, [hotspots, severityFilter]);
+  }, [hotspots, severityFilter, pollutantFilter]);
 
   // Initial / selected center coordinates
   const defaultCenter = useMemo(() => {
@@ -82,6 +102,7 @@ export default function MapIntelligence({ analytics, onDataParsed }) {
     if (!mapContainerRef.current) return;
 
     let map = null;
+    let resizeObserver = null;
 
     try {
       map = new maplibregl.Map({
@@ -100,14 +121,38 @@ export default function MapIntelligence({ analytics, onDataParsed }) {
         'bottom-right'
       );
 
+      if (typeof ResizeObserver !== 'undefined' && mapContainerRef.current) {
+        resizeObserver = new ResizeObserver(() => {
+          if (mapRef.current) {
+            mapRef.current.resize();
+          }
+        });
+        resizeObserver.observe(mapContainerRef.current);
+      }
+
       map.on('load', () => {
         setMapLoaded(true);
         setMapError(null);
+        requestAnimationFrame(() => {
+          if (mapRef.current) mapRef.current.resize();
+        });
       });
 
       map.on('error', (e) => {
-        console.warn('MapLibre Tile Notice:', e);
-        setMapError('Failed to load map tiles. Please check connection.');
+        const msg = e?.error?.message || e?.message || '';
+        if (msg.includes('Worker') || msg.includes('Failed to fetch worker')) {
+          console.error('MapLibre Critical Error:', e);
+          setMapError(msg || 'Map engine failed to initialize worker.');
+        } else if (msg.includes('style') || msg.includes('Failed to fetch style')) {
+          console.warn('MapLibre Style Fallback activated:', e);
+          try {
+            map.setStyle(FALLBACK_DARK_STYLE);
+          } catch {
+            // ignore style error
+          }
+        } else {
+          console.warn('MapLibre Tile Notice:', e);
+        }
       });
 
       mapRef.current = map;
@@ -116,6 +161,9 @@ export default function MapIntelligence({ analytics, onDataParsed }) {
     }
 
     return () => {
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
       if (map) {
         markersRef.current.forEach(m => m.remove());
         markersRef.current = [];
@@ -145,7 +193,8 @@ export default function MapIntelligence({ analytics, onDataParsed }) {
       hasValidPoints = true;
       bounds.extend([hotspot.longitude, hotspot.latitude]);
 
-      const aqiCat = getAQICategory(hotspot.meanPM25 || 0, 'pm25');
+      const currentVal = pollutantFilter === 'pm10' ? hotspot.meanPM10 : pollutantFilter === 'no2' ? hotspot.meanNO2 : hotspot.meanPM25;
+      const aqiCat = getAQICategory(currentVal || 0, pollutantFilter);
       const color = getSeverityColor(aqiCat.category);
       const isSevere = aqiCat.category === 'Severe' || aqiCat.category === 'Very Poor';
 
@@ -190,7 +239,7 @@ export default function MapIntelligence({ analytics, onDataParsed }) {
         duration: 800
       });
     }
-  }, [filteredHotspots, mapLoaded, hasCoordinates]);
+  }, [filteredHotspots, mapLoaded, hasCoordinates, pollutantFilter]);
 
   // Controls
   const handleZoomIn = () => mapRef.current?.zoomIn();

@@ -7,6 +7,7 @@ import {
   Compass
 } from 'lucide-react';
 import { getAQICategory } from '../../lib/analytics/aqiCalculator';
+import { useCountUp } from '../../lib/analytics/useCountUp';
 
 export default function ScreenAnalytics({ analytics }) {
   const [activeCurves, setActiveCurves] = useState({
@@ -21,6 +22,10 @@ export default function ScreenAnalytics({ analytics }) {
 
   const pollutantStats = analytics?.pollutantStats || {};
   const pollutantsList = Object.keys(pollutantStats);
+
+  // Animated counters for diagnostic cards
+  const animatedCompleteness = useCountUp(analytics?.completeness || 0, 900, 0);
+  const animatedPollutantCount = useCountUp(analytics?.availablePollutants?.length || 0, 700, 0);
 
   // Generate SVG paths for multi-pollutant chart
   const { pathPM25, pathPM10, pathNO2, maxScale } = useMemo(() => {
@@ -90,9 +95,9 @@ export default function ScreenAnalytics({ analytics }) {
           </div>
           <div className="kpi-value-block">
             <span className="kpi-hero-num text-secondary">
-              {analytics?.availablePollutants?.length || 0} / 6
+              {animatedPollutantCount} / 6
             </span>
-            <span className="kpi-hero-label">Monitored Pollutants</span>
+            <span className="kpi-hero-label">Monitored Criteria Pollutants</span>
           </div>
           <p className="kpi-subtext">
             {analytics?.aqi?.isCompleteOfficialAQI
@@ -120,7 +125,7 @@ export default function ScreenAnalytics({ analytics }) {
           </div>
           <div className="kpi-value-block">
             <span className="kpi-hero-num text-primary">{analytics?.confidenceTier || 'HIGH'}</span>
-            <span className="kpi-hero-label">Confidence Tier ({analytics?.completeness}%)</span>
+            <span className="kpi-hero-label">Confidence Tier ({animatedCompleteness}%)</span>
           </div>
           <p className="kpi-subtext">{analytics?.consistency || 'Consistent sensor telemetry detected.'}</p>
         </div>
@@ -191,19 +196,19 @@ export default function ScreenAnalytics({ analytics }) {
             {/* Curve 1: PM2.5 */}
             {activeCurves.pm25 && pathPM25 && (
               <>
-                <path d={`${pathPM25} L620,200 L40,200 Z`} fill="url(#gradPM25)" />
-                <path d={pathPM25} fill="none" stroke="#ef4444" strokeWidth="2.8" strokeLinecap="round" />
+                <path d={`${pathPM25} L620,200 L40,200 Z`} fill="url(#gradPM25)" className="animated-curve-area" />
+                <path d={pathPM25} fill="none" stroke="#ef4444" strokeWidth="2.8" strokeLinecap="round" className="animated-curve-path animated-curve-pm25" />
               </>
             )}
 
             {/* Curve 2: PM10 */}
             {activeCurves.pm10 && pathPM10 && (
-              <path d={pathPM10} fill="none" stroke="#ffb95f" strokeWidth="2.2" strokeDasharray="4 4" strokeLinecap="round" />
+              <path d={pathPM10} fill="none" stroke="#ffb95f" strokeWidth="2.2" strokeDasharray="4 4" strokeLinecap="round" className="animated-curve-path animated-curve-pm10" />
             )}
 
             {/* Curve 3: NO2 */}
             {activeCurves.no2 && pathNO2 && (
-              <path d={pathNO2} fill="none" stroke="#4cd7f6" strokeWidth="2.2" strokeLinecap="round" />
+              <path d={pathNO2} fill="none" stroke="#4cd7f6" strokeWidth="2.2" strokeLinecap="round" className="animated-curve-path animated-curve-no2" />
             )}
           </svg>
         </div>
@@ -284,8 +289,9 @@ export default function ScreenAnalytics({ analytics }) {
                   </div>
                   <div className="ward-bar-track">
                     <div
-                      className="ward-bar-fill"
+                      className="ward-bar-fill animated-ward-bar"
                       style={{
+                        '--bar-target-width': `${barWidth}%`,
                         width: `${barWidth}%`,
                         backgroundColor: aqiCat.category === 'Severe' ? '#ef4444' : '#ffb95f'
                       }}

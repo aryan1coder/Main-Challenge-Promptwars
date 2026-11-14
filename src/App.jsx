@@ -9,6 +9,8 @@ import ScreenHotspots from './components/screens/ScreenHotspots';
 import ScreenDirectives from './components/screens/ScreenDirectives';
 import ScreenAIBriefing from './components/screens/ScreenAIBriefing';
 import ScreenHistory from './components/screens/ScreenHistory';
+import AuthPage from './components/auth/AuthPage';
+import WorkspaceSelection from './components/auth/WorkspaceSelection';
 import { parseAirQualityData } from './lib/parsers/dataParser';
 import { analyzeAirQualityDataset } from './lib/analytics/statsEngine';
 import { generateGroundedBriefings } from './lib/services/geminiService';
@@ -47,10 +49,94 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [parseError, setParseError] = useState('');
 
+  // Authentication & Operational Workspace Flow ('auth' | 'workspace' | 'app')
+  const [authView, setAuthView] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('view')) return params.get('view');
+      const saved = sessionStorage.getItem('civic_auth_view');
+      if (saved) return saved;
+    }
+    return 'auth';
+  });
+
+  const [currentUser, setCurrentUser] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('civic_current_user');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {
+          return null;
+        }
+      }
+    }
+    return null;
+  });
+
+  const [selectedRole, setSelectedRole] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('civic_selected_role') || 'ward';
+    }
+    return 'ward';
+  });
+
   // Active Screen: 8 connected screens in Stitch architecture
   // 'overview' | 'data-ingestion' | 'analytics' | 'map-intelligence' | 'hotspots' | 'directives' | 'ai-briefing' | 'history' | 'standards'
   const [activeSection, setActiveSection] = useState('overview');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Authentication & Workspace Navigation Callbacks
+  const handleLoginSuccess = useCallback((user) => {
+    setCurrentUser(user);
+    setAuthView('workspace');
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('civic_current_user', JSON.stringify(user));
+      sessionStorage.setItem('civic_auth_view', 'workspace');
+    }
+  }, []);
+
+  const handleExploreDemo = useCallback(() => {
+    const demoUser = {
+      email: 'evaluator@promptwars.org',
+      name: 'Evaluation Commissioner',
+      isDemo: true
+    };
+    setCurrentUser(demoUser);
+    setAuthView('workspace');
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('civic_current_user', JSON.stringify(demoUser));
+      sessionStorage.setItem('civic_auth_view', 'workspace');
+    }
+  }, []);
+
+  const handleSelectWorkspace = useCallback((roleId, defaultSection) => {
+    setSelectedRole(roleId);
+    if (defaultSection) {
+      setActiveSection(defaultSection);
+    }
+    setAuthView('app');
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('civic_selected_role', roleId);
+      sessionStorage.setItem('civic_auth_view', 'app');
+    }
+  }, []);
+
+  const handleOpenWorkspace = useCallback(() => {
+    setAuthView('workspace');
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('civic_auth_view', 'workspace');
+    }
+  }, []);
+
+  const handleSignOut = useCallback(() => {
+    setCurrentUser(null);
+    setAuthView('auth');
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('civic_current_user');
+      sessionStorage.setItem('civic_auth_view', 'auth');
+    }
+  }, []);
 
   // AI Briefing State
   const [aiBriefing, setAiBriefing] = useState(null);
@@ -138,6 +224,25 @@ export default function App() {
     return activeSection;
   })();
 
+  if (authView === 'auth') {
+    return (
+      <AuthPage
+        onLoginSuccess={handleLoginSuccess}
+        onExploreDemo={handleExploreDemo}
+      />
+    );
+  }
+
+  if (authView === 'workspace') {
+    return (
+      <WorkspaceSelection
+        currentUser={currentUser}
+        onSelectWorkspace={handleSelectWorkspace}
+        onSignOut={handleSignOut}
+      />
+    );
+  }
+
   return (
     <div className="civic-command-shell">
       {/* Fixed Left Navigation Sidebar (Stitch Aetheris OS) */}
@@ -159,6 +264,10 @@ export default function App() {
           status={status}
           confidenceTier={analytics?.confidenceTier}
           datasetTitle={datasetTitle}
+          selectedRole={selectedRole}
+          currentUser={currentUser}
+          onOpenWorkspace={handleOpenWorkspace}
+          onSignOut={handleSignOut}
         />
 
         {/* Scrollable Main Workspace Canvas */}
@@ -222,6 +331,7 @@ export default function App() {
             <ScreenDirectives
               analytics={analytics}
               aiBriefing={aiBriefing}
+              selectedRole={selectedRole}
             />
           )}
 
