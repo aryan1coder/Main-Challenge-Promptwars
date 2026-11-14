@@ -1,4 +1,4 @@
-﻿import { initializeApp } from "firebase/app";
+import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { getFirestore, collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { GoogleGenerativeAI } from "@google/generative-ai";

@@ -1,4 +1,4 @@
-﻿import { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import Header from './components/Header';
 import IngestionPanel from './components/IngestionPanel';
 import MetricsGrid from './components/MetricsGrid';

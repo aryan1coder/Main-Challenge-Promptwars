@@ -1,4 +1,4 @@
-﻿# Civic Air Quality Briefing Studio
+# Civic Air Quality Briefing Studio
 
 > **AI-Driven Civic Intelligence for Urban Environmental Governance**  
 > *Developed for the PromptWars Warm-up Challenge*  

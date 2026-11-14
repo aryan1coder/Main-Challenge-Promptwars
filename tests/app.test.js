@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import { sanitizeInput } from "../src/lib/googleServices.js";
 
 describe("Security & Input Sanitization", () => {
