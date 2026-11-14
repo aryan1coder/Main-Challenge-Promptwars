@@ -1,88 +1,181 @@
-﻿import { useState } from "react";
-import { Sparkles, ShieldCheck, Send } from "lucide-react";
-import { generateAIResponse, saveLogToFirestore } from "./lib/googleServices";
+﻿import { useState, useCallback } from 'react';
+import Header from './components/Header';
+import IngestionPanel from './components/IngestionPanel';
+import MetricsGrid from './components/MetricsGrid';
+import HotspotTable from './components/HotspotTable';
+import DataPreviewTable from './components/DataPreviewTable';
+import RoleInterventions from './components/RoleInterventions';
+import BriefingConsole from './components/BriefingConsole';
+import HistoricalComparison from './components/HistoricalComparison';
+import { parseAirQualityData } from './lib/parsers/dataParser';
+import { analyzeAirQualityDataset } from './lib/analytics/statsEngine';
+import { generateGroundedBriefings } from './lib/services/geminiService';
+import { BENCHMARK_DELHI_SMOG } from './lib/benchmarkData';
+import { Shield } from 'lucide-react';
+import './App.css';
+
+// Lazy initial load of the benchmark dataset to avoid cascading renders
+function getInitialBenchmarkState() {
+  try {
+    const parsed = parseAirQualityData(BENCHMARK_DELHI_SMOG);
+    const computed = analyzeAirQualityDataset(parsed);
+    return {
+      parsed,
+      analytics: computed,
+      status: { type: 'success', message: `${parsed.totalRows} benchmark observations verified` }
+    };
+  } catch {
+    return {
+      parsed: null,
+      analytics: null,
+      status: { type: 'ready', message: 'System Ready' }
+    };
+  }
+}
 
 export default function App() {
-  const [prompt, setPrompt] = useState("");
-  const [output, setOutput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [initialState] = useState(getInitialBenchmarkState);
+  const [language, setLanguage] = useState('en');
+  const [datasetTitle, setDatasetTitle] = useState('Benchmark: Delhi Winter Smog Episode');
+  const [parsedResult, setParsedResult] = useState(initialState.parsed);
+  const [analytics, setAnalytics] = useState(initialState.analytics);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [parseError, setParseError] = useState('');
+  
+  // AI Briefing State
+  const [aiBriefing, setAiBriefing] = useState(null);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [aiError, setAiError] = useState('');
+  
+  // App status indicator
+  const [status, setStatus] = useState(initialState.status);
 
-  async function handleRun(e) {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
+  // Handler for parsing incoming tabular data
+  const handleDataParsed = useCallback((rawText, title = 'Custom Air Quality Data') => {
+    setIsAnalyzing(true);
+    setParseError('');
+    setDatasetTitle(title);
+    setStatus({ type: 'working', message: 'Parsing & Computing Metrics...' });
+
     try {
-      const reply = await generateAIResponse(prompt);
-      setOutput(reply);
-      await saveLogToFirestore("interactions", { prompt, reply }).catch(() => {});
+      const parsed = parseAirQualityData(rawText);
+      const computedAnalytics = analyzeAirQualityDataset(parsed);
+
+      setParsedResult(parsed);
+      setAnalytics(computedAnalytics);
+      setAiBriefing(null); // Reset AI briefing on new data ingestion
+      setAiError('');
+
+      setStatus({
+        type: 'success',
+        message: `${parsed.totalRows} observations verified`
+      });
     } catch (err) {
-      setError(err.message || "Failed to generate response");
+      console.error('Ingestion Error:', err);
+      setParseError(err.message || 'Failed to parse tabular data. Please verify column formats.');
+      setStatus({ type: 'error', message: 'Data Parsing Error' });
     } finally {
-      setLoading(false);
+      setIsAnalyzing(false);
     }
-  }
+  }, []);
+
+  // Handler for live Gemini AI generation
+  const handleGenerateAI = async () => {
+    if (!analytics) return;
+    setIsGeneratingAI(true);
+    setAiError('');
+    setStatus({ type: 'working', message: 'Synthesizing with Gemini 1.5 Flash...' });
+
+    try {
+      const result = await generateGroundedBriefings(analytics, { title: datasetTitle });
+      setAiBriefing(result);
+      setStatus({ type: 'success', message: 'AI Briefing Synthesized' });
+    } catch (err) {
+      console.error('Gemini Synthesis Error:', err);
+      setAiError(err.message || 'Failed to communicate with Google Gemini API.');
+      setStatus({ type: 'warning', message: 'AI Synthesis Quota/Key Error' });
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
 
   return (
-    <div style={{ maxWidth: 720, margin: "2rem auto", fontFamily: "system-ui, sans-serif", padding: "0 1rem" }}>
-      <header role="banner" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-        <Sparkles aria-hidden="true" />
-        <h1>PromptWars AI Workspace</h1>
-      </header>
+    <div className="civic-app-container">
+      <Header
+        language={language}
+        setLanguage={setLanguage}
+        status={status}
+        confidenceTier={analytics?.confidenceTier}
+      />
 
-      <main role="main">
-        <form onSubmit={handleRun} aria-label="AI Prompt Submission Form">
-          <label htmlFor="prompt-input" style={{ display: "block", marginBottom: "0.5rem", fontWeight: 600 }}>
-            Enter your query or task
-          </label>
-          <textarea
-            id="prompt-input"
-            rows={4}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Describe the problem or input..."
-            aria-required="true"
-            style={{ width: "100%", padding: "0.75rem", borderRadius: 8, border: "1px solid #cbd5e1" }}
-          />
-          <button
-            type="submit"
-            disabled={loading || !prompt.trim()}
-            aria-label="Submit prompt to Gemini AI"
-            style={{
-              marginTop: "0.75rem",
-              padding: "0.6rem 1.25rem",
-              borderRadius: 8,
-              border: "none",
-              background: "#0f172a",
-              color: "#fff",
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.4rem",
-            }}
-          >
-            <Send size={16} aria-hidden="true" />
-            {loading ? "Processing..." : "Run Gemini AI"}
-          </button>
-        </form>
+      <main className="civic-main" role="main">
+        {/* Top Ingestion Section */}
+        <IngestionPanel
+          onDataParsed={handleDataParsed}
+          isAnalyzing={isAnalyzing}
+        />
 
-        {error && (
-          <p role="alert" style={{ color: "#dc2626", marginTop: "1rem" }}>
-            {error}
-          </p>
+        {parseError && (
+          <div className="alert-banner alert-error" role="alert">
+            <strong>Data Ingestion Failure:</strong> {parseError}
+          </div>
         )}
 
-        {output && (
-          <section aria-live="polite" aria-label="AI Generated Output" style={{ marginTop: "1.5rem", padding: "1rem", background: "#f8fafc", borderRadius: 8 }}>
-            <h2>Response</h2>
-            <p style={{ whiteSpace: "pre-wrap" }}>{output}</p>
-          </section>
+        {/* Deterministic Telemetry & Metrics */}
+        {analytics && (
+          <>
+            <MetricsGrid
+              analytics={analytics}
+              language={language}
+            />
+
+            <div className="civic-grid-two-col">
+              <HotspotTable
+                hotspots={analytics.hotspots}
+                anomalies={analytics.anomaliesSummary.recent}
+              />
+              <DataPreviewTable
+                parsedResult={parsedResult}
+              />
+            </div>
+
+            {/* Role-Tailored Operational Directives */}
+            <RoleInterventions
+              aiBriefing={aiBriefing}
+              analytics={analytics}
+            />
+
+            {/* AI Briefing & Multilingual Citizen Advisory */}
+            <BriefingConsole
+              aiBriefing={aiBriefing}
+              analytics={analytics}
+              language={language}
+              setLanguage={setLanguage}
+              onGenerateAI={handleGenerateAI}
+              isGenerating={isGeneratingAI}
+              aiError={aiError}
+            />
+
+            {/* Historical Trend Delta & Intervention Efficacy */}
+            <HistoricalComparison
+              analytics={analytics}
+              aiBriefing={aiBriefing}
+              datasetTitle={datasetTitle}
+            />
+          </>
         )}
       </main>
 
-      <footer role="contentinfo" style={{ marginTop: "2rem", fontSize: "0.85rem", color: "#64748b", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-        <ShieldCheck size={16} aria-hidden="true" />
-        <span>Powered by Google Gemini 1.5 Flash & Firebase</span>
+      <footer className="civic-footer" role="contentinfo">
+        <div className="footer-content">
+          <div className="footer-left">
+            <Shield size={16} className="text-civic-blue" aria-hidden="true" />
+            <span>Civic Air Quality Briefing Studio | PromptWars Warm-up Challenge</span>
+          </div>
+          <div className="footer-right">
+            <span>Powered by <strong>Google Gemini 1.5 Flash</strong> & Deterministic Environmental Science</span>
+          </div>
+        </div>
       </footer>
     </div>
   );
