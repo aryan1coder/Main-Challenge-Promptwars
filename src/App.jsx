@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+﻿import { useState } from "react";
 import { Sparkles, ShieldCheck, Send } from "lucide-react";
 import { generateAIResponse, saveLogToFirestore } from "./lib/googleServices";
 
