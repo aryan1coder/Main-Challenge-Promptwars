@@ -1,0 +1,30 @@
+# Dependencies & Locks (keeps repo < 100 KB)
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build & Cache outputs
+dist/
+dist-ssr/
+.vite/
+coverage/
+*.local
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# Media & Heavy Assets
+*.mp4
+*.mov
+*.zip
+*.tar.gz
+
+# Editor & OS files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
