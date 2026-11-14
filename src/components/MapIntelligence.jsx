@@ -73,7 +73,7 @@ export default function MapIntelligence({ analytics, onDataParsed }) {
 
   const hotspots = useMemo(() => analytics?.hotspots || [], [analytics]);
   const hasCoordinates = useMemo(() => {
-    return hotspots.some(h => typeof h.latitude === 'number' && typeof h.longitude === 'number');
+    return hotspots.some(h => Number.isFinite(h.latitude) && Number.isFinite(h.longitude));
   }, [hotspots]);
 
   // Filtered hotspots based on user controls
@@ -81,25 +81,26 @@ export default function MapIntelligence({ analytics, onDataParsed }) {
     return hotspots.filter(h => {
       if (severityFilter === 'all') return true;
       const val = pollutantFilter === 'pm10' ? h.meanPM10 : pollutantFilter === 'no2' ? h.meanNO2 : h.meanPM25;
-      const cat = getAQICategory(val || 0, pollutantFilter).category;
+      if (!Number.isFinite(val)) return false;
+      const cat = getAQICategory(val, pollutantFilter).category;
       return cat.toLowerCase() === severityFilter.toLowerCase();
     });
   }, [hotspots, severityFilter, pollutantFilter]);
 
   // Initial / selected center coordinates
   const defaultCenter = useMemo(() => {
-    const valid = hotspots.filter(h => typeof h.latitude === 'number' && typeof h.longitude === 'number');
+    const valid = hotspots.filter(h => Number.isFinite(h.latitude) && Number.isFinite(h.longitude));
     if (valid.length > 0) {
       const avgLat = valid.reduce((s, h) => s + h.latitude, 0) / valid.length;
       const avgLon = valid.reduce((s, h) => s + h.longitude, 0) / valid.length;
       return [avgLon, avgLat];
     }
-    return [77.2090, 28.6139]; // Default Central Delhi coordinates
+    return null;
   }, [hotspots]);
 
   // Initialize MapLibre GL instance
   useEffect(() => {
-    if (!mapContainerRef.current) return;
+    if (!mapContainerRef.current || !hasCoordinates || !defaultCenter) return;
 
     let map = null;
     let resizeObserver = null;
@@ -171,7 +172,7 @@ export default function MapIntelligence({ analytics, onDataParsed }) {
         mapRef.current = null;
       }
     };
-  }, [defaultCenter]);
+  }, [defaultCenter, hasCoordinates]);
 
   // Update map markers when filteredHotspots or mapLoaded changes
   useEffect(() => {
@@ -188,13 +189,14 @@ export default function MapIntelligence({ analytics, onDataParsed }) {
     let hasValidPoints = false;
 
     filteredHotspots.forEach(hotspot => {
-      if (typeof hotspot.latitude !== 'number' || typeof hotspot.longitude !== 'number') return;
+      if (!Number.isFinite(hotspot.latitude) || !Number.isFinite(hotspot.longitude)) return;
 
       hasValidPoints = true;
       bounds.extend([hotspot.longitude, hotspot.latitude]);
 
       const currentVal = pollutantFilter === 'pm10' ? hotspot.meanPM10 : pollutantFilter === 'no2' ? hotspot.meanNO2 : hotspot.meanPM25;
-      const aqiCat = getAQICategory(currentVal || 0, pollutantFilter);
+      if (!Number.isFinite(currentVal)) return;
+      const aqiCat = getAQICategory(currentVal, pollutantFilter);
       const color = getSeverityColor(aqiCat.category);
       const isSevere = aqiCat.category === 'Severe' || aqiCat.category === 'Very Poor';
 
@@ -245,7 +247,7 @@ export default function MapIntelligence({ analytics, onDataParsed }) {
   const handleZoomIn = () => mapRef.current?.zoomIn();
   const handleZoomOut = () => mapRef.current?.zoomOut();
   const handleResetView = () => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || !defaultCenter) return;
     mapRef.current.flyTo({
       center: defaultCenter,
       zoom: 11,

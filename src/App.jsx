@@ -1,47 +1,53 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
-import ScreenOverview from './components/screens/ScreenOverview';
-import ScreenDataIngestion from './components/screens/ScreenDataIngestion';
-import ScreenAnalytics from './components/screens/ScreenAnalytics';
-import ScreenMapIntelligence from './components/screens/ScreenMapIntelligence';
-import ScreenHotspots from './components/screens/ScreenHotspots';
-import ScreenDirectives from './components/screens/ScreenDirectives';
-import ScreenAIBriefing from './components/screens/ScreenAIBriefing';
-import ScreenHistory from './components/screens/ScreenHistory';
 import AuthPage from './components/auth/AuthPage';
 import WorkspaceSelection from './components/auth/WorkspaceSelection';
 import { parseAirQualityData } from './lib/parsers/dataParser';
 import { analyzeAirQualityDataset } from './lib/analytics/statsEngine';
 import { generateGroundedBriefings } from './lib/services/geminiService';
+import { auth, signOutUser } from './lib/googleServices';
+import { onAuthStateChanged } from 'firebase/auth';
 import { BENCHMARK_DELHI_SMOG } from './lib/benchmarkData';
 import { Shield, AlertCircle, BookOpen, CheckCircle2 } from 'lucide-react';
 import './App.css';
 
+const ScreenOverview = lazy(() => import('./components/screens/ScreenOverview'));
+const ScreenDataIngestion = lazy(() => import('./components/screens/ScreenDataIngestion'));
+const ScreenAnalytics = lazy(() => import('./components/screens/ScreenAnalytics'));
+const ScreenMapIntelligence = lazy(() => import('./components/screens/ScreenMapIntelligence'));
+const ScreenHotspots = lazy(() => import('./components/screens/ScreenHotspots'));
+const ScreenDirectives = lazy(() => import('./components/screens/ScreenDirectives'));
+const ScreenAIBriefing = lazy(() => import('./components/screens/ScreenAIBriefing'));
+const ScreenHistory = lazy(() => import('./components/screens/ScreenHistory'));
+
+function getSavedDemoUser() {
+  try {
+    if (sessionStorage.getItem('civic_demo_session') !== 'true') return null;
+    const user = JSON.parse(sessionStorage.getItem('civic_current_user') || 'null');
+    return user?.isDemo === true ? user : null;
+  } catch {
+    return null;
+  }
+}
+
 // Lazy initial load of the benchmark dataset to avoid cascading renders
 function getInitialBenchmarkState() {
-  try {
-    const parsed = parseAirQualityData(BENCHMARK_DELHI_SMOG);
-    const computed = analyzeAirQualityDataset(parsed, {
-      title: 'Benchmark: Delhi Winter Smog Episode',
-      isBenchmark: true
-    });
-    return {
-      parsed,
-      analytics: computed,
-      status: { type: 'success', message: `${parsed.totalRows} observations verified` }
-    };
-  } catch {
-    return {
-      parsed: null,
-      analytics: null,
-      status: { type: 'ready', message: 'System Ready' }
-    };
-  }
+  const parsed = parseAirQualityData(BENCHMARK_DELHI_SMOG);
+  const computed = analyzeAirQualityDataset(parsed, {
+    title: 'Benchmark: Delhi Winter Smog Episode',
+    isBenchmark: true
+  });
+  return {
+    parsed,
+    analytics: computed,
+    status: { type: 'success', message: `${parsed.totalRows} observations verified` }
+  };
 }
 
 export default function App() {
   const [initialState] = useState(getInitialBenchmarkState);
+  const [demoUser] = useState(getSavedDemoUser);
   const [language, setLanguage] = useState('en');
   const [datasetTitle, setDatasetTitle] = useState('Benchmark: Delhi Winter Smog Episode');
   const [parsedResult, setParsedResult] = useState(initialState.parsed);
@@ -51,28 +57,10 @@ export default function App() {
 
   // Authentication & Operational Workspace Flow ('auth' | 'workspace' | 'app')
   const [authView, setAuthView] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('view')) return params.get('view');
-      const saved = sessionStorage.getItem('civic_auth_view');
-      if (saved) return saved;
-    }
-    return 'auth';
+    if (!demoUser) return 'auth';
+    return sessionStorage.getItem('civic_auth_view') === 'app' ? 'app' : 'workspace';
   });
-
-  const [currentUser, setCurrentUser] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = sessionStorage.getItem('civic_current_user');
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch {
-          return null;
-        }
-      }
-    }
-    return null;
-  });
+  const [currentUser, setCurrentUser] = useState(demoUser);
 
   const [selectedRole, setSelectedRole] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -80,6 +68,23 @@ export default function App() {
     }
     return 'ward';
   });
+
+  useEffect(() => {
+    if (!auth) return undefined;
+    return onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        setCurrentUser({
+          email: firebaseUser.email,
+          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Authorized User',
+          isDemo: false
+        });
+        setAuthView((current) => current === 'auth' ? 'workspace' : current);
+      } else if (!getSavedDemoUser()) {
+        setCurrentUser(null);
+        setAuthView('auth');
+      }
+    });
+  }, []);
 
   // Active Screen: 8 connected screens in Stitch architecture
   // 'overview' | 'data-ingestion' | 'analytics' | 'map-intelligence' | 'hotspots' | 'directives' | 'ai-briefing' | 'history' | 'standards'
@@ -91,7 +96,8 @@ export default function App() {
     setCurrentUser(user);
     setAuthView('workspace');
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem('civic_current_user', JSON.stringify(user));
+      sessionStorage.removeItem('civic_demo_session');
+      sessionStorage.removeItem('civic_current_user');
       sessionStorage.setItem('civic_auth_view', 'workspace');
     }
   }, []);
@@ -105,6 +111,7 @@ export default function App() {
     setCurrentUser(demoUser);
     setAuthView('workspace');
     if (typeof window !== 'undefined') {
+      sessionStorage.setItem('civic_demo_session', 'true');
       sessionStorage.setItem('civic_current_user', JSON.stringify(demoUser));
       sessionStorage.setItem('civic_auth_view', 'workspace');
     }
@@ -129,10 +136,17 @@ export default function App() {
     }
   }, []);
 
-  const handleSignOut = useCallback(() => {
+  const handleSignOut = useCallback(async () => {
+    try {
+      await signOutUser();
+    } catch (error) {
+      console.error('Sign-out failed:', error);
+      return;
+    }
     setCurrentUser(null);
     setAuthView('auth');
     if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('civic_demo_session');
       sessionStorage.removeItem('civic_current_user');
       sessionStorage.setItem('civic_auth_view', 'auth');
     }
@@ -181,12 +195,17 @@ export default function App() {
     if (!analytics) return;
     setIsGeneratingAI(true);
     setAiError('');
-    setStatus({ type: 'working', message: 'Synthesizing with Gemini 1.5 Flash...' });
+    setStatus({ type: 'working', message: 'Preparing grounded briefing...' });
 
     try {
       const result = await generateGroundedBriefings(analytics, { title: datasetTitle });
       setAiBriefing(result);
-      setStatus({ type: 'success', message: 'AI Briefing Synthesized' });
+      setStatus({
+        type: 'success',
+        message: result.source === 'rule-based-fallback'
+          ? 'Rule-based fallback briefing generated'
+          : 'Gemini briefing synthesized'
+      });
     } catch (err) {
       console.error('Gemini Synthesis Error:', err);
       setAiError(err.message || 'Failed to communicate with Google Gemini API.');
@@ -289,6 +308,7 @@ export default function App() {
           )}
 
           {/* 8 Connected Screen Router */}
+          <Suspense fallback={<div className="screen-loading-state" role="status">Loading workspace…</div>}>
           {canonicalSection === 'overview' && (
             <ScreenOverview
               analytics={analytics}
@@ -389,6 +409,7 @@ export default function App() {
               </div>
             </section>
           )}
+          </Suspense>
 
           {/* Command Center Footer */}
           <footer className="civic-command-footer" role="contentinfo">

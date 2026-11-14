@@ -53,6 +53,20 @@ describe('Data Parser & Normalizer', () => {
     expect(result.anomalies[0].type).toBe('NEGATIVE_VALUE');
   });
 
+  it('rejects partial numeric values instead of silently parsing a numeric prefix', () => {
+    const result = parseAirQualityData(
+      'Timestamp,Ward,PM2.5\n2026-11-14 08:00,Ward 1,120ppm'
+    );
+    expect(result.rows[0].pm25).toBeNull();
+    expect(result.rows[0]._flags[0]).toContain('Non-numeric');
+  });
+
+  it('enforces input-size and observation-count limits before analytics', () => {
+    expect(() => parseAirQualityData('a'.repeat(5_000_001))).toThrow('5 MB text limit');
+    const tooManyRows = `Timestamp,Ward,PM2.5\n${'2026-11-14 08:00,Ward 1,20\n'.repeat(50_001)}`;
+    expect(() => parseAirQualityData(tooManyRows)).toThrow('50000 observation limit');
+  });
+
   it('flags sensor flatlining when identical values repeat 5+ times', () => {
     let tsv = `Timestamp\tWard\tPM2.5\n`;
     for (let i = 0; i < 6; i++) {

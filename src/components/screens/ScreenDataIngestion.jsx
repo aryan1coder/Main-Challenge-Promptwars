@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   UploadCloud,
   FileText,
@@ -16,6 +16,8 @@ import {
   BENCHMARK_GEOSPATIAL_DELHI
 } from '../../lib/benchmarkData';
 
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+
 export default function ScreenDataIngestion({
   parsedResult,
   analytics,
@@ -26,36 +28,49 @@ export default function ScreenDataIngestion({
   const [pastedText, setPastedText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [dragOver, setDragOver] = useState(false);
+  const [fileError, setFileError] = useState('');
   const fileInputRef = useRef(null);
+  const fileReaderRef = useRef(null);
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files?.[0];
+  useEffect(() => () => fileReaderRef.current?.abort(), []);
+
+  const readDataFile = (file) => {
     if (!file) return;
+    setFileError('');
+
+    if (!/\.(csv|tsv|txt)$/i.test(file.name)) {
+      setFileError('Choose a CSV, TSV, or text file.');
+      return;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      setFileError('File exceeds the 5 MB limit. Split it into smaller datasets and retry.');
+      return;
+    }
 
     const reader = new FileReader();
+    fileReaderRef.current?.abort();
+    fileReaderRef.current = reader;
     reader.onload = (event) => {
       const content = event.target?.result;
       if (typeof content === 'string') {
         onDataParsed(content, file.name);
+      } else {
+        setFileError('The selected file could not be decoded as text.');
       }
     };
+    reader.onerror = () => setFileError('The selected file could not be read. Try another file.');
     reader.readAsText(file);
+  };
+
+  const handleFileUpload = (e) => {
+    readDataFile(e.target.files?.[0]);
+    e.target.value = '';
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
     setDragOver(false);
-    const file = e.dataTransfer.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result;
-      if (typeof content === 'string') {
-        onDataParsed(content, file.name);
-      }
-    };
-    reader.readAsText(file);
+    readDataFile(e.dataTransfer.files?.[0]);
   };
 
   const handlePasteSubmit = (e) => {
@@ -187,8 +202,9 @@ export default function ScreenDataIngestion({
                 <span>✓ CPCB 2026 Compliant</span>
                 <span>✓ EPA AirNow Breakpoints</span>
                 <span>✓ Auto-Delimiter Detection</span>
-                <span>Max Payload: 50MB</span>
+                <span>Max File: 5 MB</span>
               </div>
+              {fileError && <p className="alert-banner alert-error" role="alert">{fileError}</p>}
             </div>
           ) : (
             <form onSubmit={handlePasteSubmit} className="paste-buffer-card">
@@ -212,6 +228,7 @@ export default function ScreenDataIngestion({
                 placeholder="Paste raw tabular observations (CSV, TSV, or Semicolon format)...&#10;Timestamp,Ward,PM2.5,PM10,NO2&#10;2026-11-14 08:00,Anand Vihar,420,590,135"
                 rows={12}
                 className="paste-textarea"
+                maxLength={5_000_000}
               />
 
               <div className="paste-submit-footer">

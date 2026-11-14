@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import {
   Shield,
   Lock,
@@ -14,7 +14,31 @@ import {
   Compass,
   FileText
 } from 'lucide-react';
-import { loginWithGoogle } from '../../lib/googleServices';
+import {
+  auth,
+  createEmailAccount,
+  loginWithGoogle,
+  sendPasswordReset,
+  signInWithEmail
+} from '../../lib/googleServices';
+
+const AUTH_ERROR_MESSAGES = {
+  'auth/email-already-in-use': 'An account already exists for this email address.',
+  'auth/invalid-credential': 'The email or password is incorrect.',
+  'auth/invalid-email': 'Enter a valid email address.',
+  'auth/network-request-failed': 'Authentication could not reach Firebase. Check your connection and try again.',
+  'auth/operation-not-allowed': 'This sign-in method is not enabled for this Firebase project.',
+  'auth/popup-blocked': 'Your browser blocked the Google sign-in popup. Allow popups and try again.',
+  'auth/popup-closed-by-user': 'Google sign-in was cancelled.',
+  'auth/weak-password': 'Choose a password with at least 6 characters.',
+  'auth/user-disabled': 'This account has been disabled.',
+  'auth/user-not-found': 'The email or password is incorrect.',
+  'auth/wrong-password': 'The email or password is incorrect.'
+};
+
+function getAuthErrorMessage(error) {
+  return AUTH_ERROR_MESSAGES[error?.code] || 'Authentication failed. Check your Firebase configuration and try again.';
+}
 
 export default function AuthPage({ onLoginSuccess, onExploreDemo }) {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -25,24 +49,7 @@ export default function AuthPage({ onLoginSuccess, onExploreDemo }) {
   const [isLoading, setIsLoading] = useState(false);
   const [authError, setAuthError] = useState('');
   const [authNotice, setAuthNotice] = useState('');
-  const timeoutIdsRef = useRef([]);
-
-  useEffect(() => {
-    return () => {
-      timeoutIdsRef.current.forEach((timerId) => clearTimeout(timerId));
-      timeoutIdsRef.current = [];
-    };
-  }, []);
-
-  const scheduleAuthTimeout = (callback, delay = 0) => {
-    const timerId = setTimeout(() => {
-      callback();
-      timeoutIdsRef.current = timeoutIdsRef.current.filter((id) => id !== timerId);
-    }, delay);
-    timeoutIdsRef.current.push(timerId);
-  };
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setAuthError('');
     setAuthNotice('');
@@ -63,48 +70,41 @@ export default function AuthPage({ onLoginSuccess, onExploreDemo }) {
     }
 
     setIsLoading(true);
-    // Simulate secure Supabase / Auth token resolution
-    scheduleAuthTimeout(() => {
-      setIsLoading(false);
-      const user = {
-        email,
-        name: email.split('@')[0].replace(/[._]/g, ' ').toUpperCase(),
-        isDemo: false,
-        rememberMe
-      };
+    try {
+      const credential = isSignUp
+        ? await createEmailAccount(email, password, rememberMe)
+        : await signInWithEmail(email, password, rememberMe);
+      const user = credential.user;
       if (typeof onLoginSuccess === 'function') {
-        onLoginSuccess(user);
+        onLoginSuccess({
+          email: user.email,
+          name: user.displayName || user.email?.split('@')[0] || 'Authorized User',
+          isDemo: false
+        });
       }
-    }, 600);
+    } catch (error) {
+      setAuthError(getAuthErrorMessage(error));
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     setAuthError('');
+    setAuthNotice('');
     try {
-      const res = await loginWithGoogle();
+      const res = await loginWithGoogle(rememberMe);
       const user = {
-        email: res?.user?.email || 'officer@delhi.gov.in',
-        name: res?.user?.displayName || 'Authorized Environmental Officer',
+        email: res.user.email,
+        name: res.user.displayName || res.user.email?.split('@')[0] || 'Authorized User',
         isDemo: false
       };
       if (typeof onLoginSuccess === 'function') {
         onLoginSuccess(user);
       }
-    } catch (err) {
-      console.warn('Google Auth popup notice:', err.message);
-      // Fallback for evaluator/sandbox environments without live OAuth keys
-      setAuthNotice('Direct evaluation mode active: Logging in with sandbox evaluator credentials.');
-      scheduleAuthTimeout(() => {
-        const user = {
-          email: 'judge.evaluator@promptwars.org',
-          name: 'PromptWars Evaluator',
-          isDemo: true
-        };
-        if (typeof onLoginSuccess === 'function') {
-          onLoginSuccess(user);
-        }
-      }, 700);
+    } catch (error) {
+      setAuthError(getAuthErrorMessage(error));
     } finally {
       setIsLoading(false);
     }
@@ -236,11 +236,19 @@ export default function AuthPage({ onLoginSuccess, onExploreDemo }) {
                 type="button"
                 className="btn-demo-instant-hero"
                 onClick={handleQuickDemoClick}
+                disabled={isLoading}
               >
                 <span>Launch Interactive Demo Hub</span>
                 <ArrowRight size={17} />
               </button>
             </div>
+
+            {!auth && (
+              <div className="auth-alert-box alert-info" role="status">
+                <AlertCircle size={15} className="shrink-0" />
+                <span>Real account sign-in is unavailable until Firebase Authentication is configured. Demo access remains separate.</span>
+              </div>
+            )}
 
             <div className="auth-or-divider">
               <span className="divider-line"></span>
@@ -285,7 +293,7 @@ export default function AuthPage({ onLoginSuccess, onExploreDemo }) {
               type="button"
               className="btn-supabase-oauth"
               onClick={handleGoogleSignIn}
-              disabled={isLoading}
+              disabled={isLoading || !auth}
             >
               <svg className="google-icon-svg" viewBox="0 0 24 24" width="16" height="16">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -313,6 +321,7 @@ export default function AuthPage({ onLoginSuccess, onExploreDemo }) {
                     onChange={(e) => setEmail(e.target.value)}
                     autoComplete="email"
                     required
+                    disabled={isLoading || !auth}
                   />
                 </div>
               </div>
@@ -326,7 +335,24 @@ export default function AuthPage({ onLoginSuccess, onExploreDemo }) {
                     <button
                       type="button"
                       className="link-forgot-password"
-                      onClick={() => setAuthNotice('Password reset instructions sent to registered municipal address.')}
+                      onClick={async () => {
+                        setAuthError('');
+                        setAuthNotice('');
+                        if (!email.trim()) {
+                          setAuthError('Enter your email address to request a password reset.');
+                          return;
+                        }
+                        setIsLoading(true);
+                        try {
+                          await sendPasswordReset(email);
+                          setAuthNotice('If an account exists for this address, Firebase will send password reset instructions.');
+                        } catch (error) {
+                          setAuthError(getAuthErrorMessage(error));
+                        } finally {
+                          setIsLoading(false);
+                        }
+                      }}
+                      disabled={isLoading || !auth}
                     >
                       Forgot password?
                     </button>
@@ -343,6 +369,7 @@ export default function AuthPage({ onLoginSuccess, onExploreDemo }) {
                     onChange={(e) => setPassword(e.target.value)}
                     autoComplete={isSignUp ? 'new-password' : 'current-password'}
                     required
+                    disabled={isLoading || !auth}
                   />
                   <button
                     type="button"
@@ -363,6 +390,7 @@ export default function AuthPage({ onLoginSuccess, onExploreDemo }) {
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
                     className="supabase-checkbox"
+                    disabled={isLoading || !auth}
                   />
                   <span>Remember operational session for 30 days</span>
                 </label>
@@ -372,7 +400,7 @@ export default function AuthPage({ onLoginSuccess, onExploreDemo }) {
               <button
                 type="submit"
                 className="btn-supabase-primary"
-                disabled={isLoading}
+                disabled={isLoading || !auth}
               >
                 {isLoading ? (
                   <span className="btn-loading-state">
@@ -387,22 +415,9 @@ export default function AuthPage({ onLoginSuccess, onExploreDemo }) {
               </button>
             </form>
 
-            {/* Quick Demo Fill Shortcut */}
-            <div className="demo-credentials-footer">
-              <span className="footer-hint-text">
-                Quick Evaluator Fill:{' '}
-                <button
-                  type="button"
-                  className="demo-fill-btn"
-                  onClick={() => {
-                    setEmail('evaluator@civicair.gov.in');
-                    setPassword('PromptWars2026');
-                  }}
-                >
-                  evaluator@civicair.gov.in / PromptWars2026
-                </button>
-              </span>
-            </div>
+            <p className="demo-credentials-footer">
+              Credentials are verified by Firebase when configured; demo access does not create or authenticate an account.
+            </p>
           </div>
         </section>
       </div>

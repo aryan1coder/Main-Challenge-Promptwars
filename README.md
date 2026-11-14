@@ -13,7 +13,7 @@
 ---
 
 ## 2. Professional Project Overview
-**Civic Air Quality Briefing Studio** is an open-source, client-first civic intelligence workbench built to bridge the gap between noisy environmental sensor feeds and frontline urban decision-makers. The platform ingests messy tabular datasets, executes deterministic mathematical and unit normalization, detects spatial-temporal pollution hotspots, and leverages Google Gemini 1.5 Flash to synthesize evidence-grounded administrative directives and bilingual citizen health advisories.
+**Civic Air Quality Briefing Studio** is an open-source civic intelligence workbench for transforming noisy sensor datasets into traceable, role-specific findings. The browser performs deterministic parsing and calculations; when deployed with a server-side Gemini key, a Vercel function can synthesize a structured briefing. If that service is unavailable, the application clearly labels its deterministic rule-based briefing.
 
 ---
 
@@ -33,7 +33,7 @@ During severe air pollution episodes, municipal ward officers, residential facil
 ## 5. Our Proposed Solution
 A dual-layer hybrid architecture:
 1. **Deterministic Statistical Core:** Browser-side JavaScript algorithms execute unit normalization, anomaly detection, statistical aggregation, and National Air Quality Index (NAAQS/EPA) calculations with 100% mathematical precision.
-2. **Grounded AI Synthesis Engine:** Pre-aggregated statistical metrics are injected into Google Gemini 1.5 Flash via structured prompts. Gemini synthesizes role-specific operational directives and bilingual public communications grounded in verifiable evidence.
+2. **Grounded AI Synthesis Engine:** A bounded set of calculated metrics is sent to the server-side Gemini 2.5 Flash endpoint. Provider failures produce a clearly labeled deterministic fallback, never a successful-looking simulated AI response.
 
 ---
 
@@ -49,15 +49,15 @@ A dual-layer hybrid architecture:
 
 | Feature Module | Description | Implementation Status |
 | :--- | :--- | :--- |
-| **Tabular Data Ingestion** | Upload `.csv` or paste messy tabular data with automatic delimiter detection. | `Planned (Phase 2)` |
-| **Unit Normalization Engine** | Converts $\text{ppm}/\text{ppb}$ to $\mu\text{g}/\text{m}^3$ and normalizes date-time formats. | `Planned (Phase 2)` |
-| **Data Quality & Anomaly Filter** | Flags sensor flatlines, negative values, and temporal data gaps. | `Planned (Phase 2)` |
-| **Deterministic AQI Calculator** | Computes official sub-indices according to Indian NAAQS and US-EPA breakpoints. | `Planned (Phase 2)` |
-| **Input Sanitization & Security** | Sanitizes user inputs against malicious scripts while preserving valid text. | `Implemented and Tested` |
-| **Grounded AI Briefing Synthesis** | Generates executive briefings grounded in calculated metrics using Gemini 1.5 Flash. | `Implemented (Baseline in src/lib/googleServices.js)` |
-| **Role-Specific Directives** | Generates tailored action plans for Ward Officers, Housing Societies, and Schools. | `Planned (Phase 5)` |
-| **Bilingual NLP Engine** | Delivers bilingual output in Hindi (Devanagari) and English across reading levels. | `Planned (Phase 6)` |
-| **Briefing Persistence** | Stores briefing history via LocalStorage with optional Cloud Firestore sync. | `In Progress (Phase 3)` |
+| **Tabular Data Ingestion** | Upload `.csv`/`.tsv`/`.txt` or paste data; 5 MB / 50,000-row limits and delimiter detection. | `Implemented` |
+| **Unit Normalization Engine** | Normalizes supported gas units and maps common headers. | `Implemented; validate source units before use` |
+| **Data Quality & Anomaly Filter** | Preserves missing values, flags negative values and sensor flatlines. | `Implemented` |
+| **Deterministic AQI Calculator** | Computes CPCB sub-indices and identifies indicative versus qualified AQI. | `Implemented` |
+| **Input Security** | Validates file size/type, bounds parser input, and relies on React text escaping. | `Implemented` |
+| **Grounded AI Briefing Synthesis** | Server-side Gemini 2.5 Flash endpoint with strict request/output validation and labeled rule-based fallback. | `Implemented when server key is configured` |
+| **Role-Specific Directives** | Provides tailored recommendations for Ward Officers, Housing Societies, Schools, and Citizens. | `Implemented; advisory only` |
+| **Bilingual NLP Engine** | Produces English and Hindi advisories. | `Implemented` |
+| **Briefing Persistence** | Stores briefing history in browser LocalStorage. | `Implemented locally; Firestore sync is not wired into the UI` |
 | **Historical Delta Comparison** | Computes statistical shifts ($\Delta$) between past and present briefings. | `Planned (Phase 7)` |
 
 ---
@@ -77,7 +77,7 @@ A dual-layer hybrid architecture:
 [Grounded Prompt Construction]    ──> Bundles calculated facts into structured schema
            │
            ▼
-[Google Gemini 1.5 Flash API]     ──> Live synthesis of role directives & advisories
+[Server-side Gemini 2.5 Flash]   ──> Structured synthesis (optional)
            │
            ▼
 [Multi-Persona Briefing Studio]   ──> Ward Officer / Housing / School / Citizen Tabs
@@ -89,10 +89,10 @@ A dual-layer hybrid architecture:
 ---
 
 ## 9. AI Capabilities
-- **Model:** `gemini-1.5-flash` via `@google/generative-ai` SDK (`^0.24.1`).
-- **Grounded Synthesis:** Gemini receives deterministic mathematical facts and produces narrative analysis without guessing or calculating numbers.
-- **Zero-Disqualification Compliance:** Live API requests are made for all AI generations. No canned responses or simulated delays.
-- **Structured Schema:** Enforces structured JSON output (`responseMimeType: "application/json"`) for reliable programmatic UI rendering.
+- **Model:** `gemini-2.5-flash` through the server-side `/api/generate-briefing` endpoint.
+- **Grounding:** The endpoint accepts only compact, validated aggregate metrics; model output is still labeled as generated and requires review.
+- **Fallback:** When Gemini is unconfigured or unavailable, the UI labels a deterministic rule-based advisory and cites only available metrics.
+- **Structured Output:** Provider JSON is schema-checked before being returned.
 
 ---
 
@@ -194,8 +194,8 @@ cd warm-up
 # 2. Copy the environment configuration template
 Copy-Item .env.example .env.local
 
-# 3. Open .env.local in your editor and configure your Gemini API Key
-# VITE_GEMINI_API_KEY="your_api_key_here"
+# 3. For live Gemini locally, use the Vercel CLI and set GEMINI_API_KEY server-side.
+#    Plain `npm run dev` uses the labeled deterministic fallback.
 
 # 4. Install dependencies
 npm install
@@ -216,8 +216,8 @@ cd warm-up
 # 2. Copy the environment configuration template
 cp .env.example .env.local
 
-# 3. Configure your API key in .env.local
-# VITE_GEMINI_API_KEY="your_api_key_here"
+# 3. For live Gemini locally, use the Vercel CLI and set GEMINI_API_KEY server-side.
+#    Plain `npm run dev` uses the labeled deterministic fallback.
 
 # 4. Install dependencies
 npm install
@@ -230,11 +230,11 @@ npm run dev
 ---
 
 ## 19. Environment Variables
-The application relies on client-side environment variables prefixed with `VITE_`. All variables are defined in [.env.example](.env.example):
+Only Firebase web configuration uses client-side `VITE_` variables. Gemini credentials must remain server-side:
 
 | Variable | Required? | Purpose |
 | :--- | :--- | :--- |
-| `VITE_GEMINI_API_KEY` | **Yes** (for AI features) | Google AI Studio API key used to generate grounded briefings. |
+| `GEMINI_API_KEY` | Optional | Server-only Google AI Studio key for the Vercel endpoint. Never prefix it with `VITE_`. |
 | `VITE_FIREBASE_API_KEY` | Optional | Firebase Web API key for cloud storage and authentication. |
 | `VITE_FIREBASE_AUTH_DOMAIN` | Optional | Firebase project authentication domain. |
 | `VITE_FIREBASE_PROJECT_ID` | Optional | Firebase project ID for Cloud Firestore. |
@@ -243,23 +243,23 @@ The application relies on client-side environment variables prefixed with `VITE_
 | `VITE_FIREBASE_APP_ID` | Optional | Firebase Web application identifier. |
 
 > [!NOTE]  
-> If Firebase variables are omitted, the application operates in local offline mode using browser `localStorage`.
+> If Firebase variables are omitted, real account sign-in is disabled and the explicitly labeled demo remains available. Local briefing history uses browser `localStorage`.
 
 ---
 
 ## 20. Google Gemini Integration Setup
 1. Visit [Google AI Studio](https://aistudio.google.com/) and generate an API key.
-2. In `.env.local`, set:
+2. Configure `GEMINI_API_KEY` in Vercel project settings. For local serverless testing, use the Vercel CLI and its server-side environment configuration.
    ```env
-   VITE_GEMINI_API_KEY="your_actual_key"
+   GEMINI_API_KEY="your_actual_key"
    ```
-3. The platform communicates directly with `gemini-1.5-flash` using `@google/generative-ai`.
+3. The browser sends compact calculated summaries to `/api/generate-briefing`; the Gemini key is never bundled into browser code.
 
 ---
 
 ## 21. Database Configuration
 - **Local Fallback:** By default, all briefings and uploaded datasets persist locally in browser storage.
-- **Cloud Firestore (Optional):** To enable cross-device cloud persistence, create a free project in the [Firebase Console](https://console.firebase.google.com/), enable Firestore Database in test mode, and populate the Firebase keys in `.env.local`.
+- **Cloud Firestore (Optional):** Firebase configuration enables the service integration, but the current briefing-history UI persists locally. Configure restrictive Firestore security rules before using cloud writes; never use test-mode rules in production.
 
 ---
 

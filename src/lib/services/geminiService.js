@@ -1,175 +1,215 @@
-/**
- * Civic Air Quality Briefing Studio - Google Gemini Intelligence Service
- * Hybrid Architecture:
- * 1. Production (Vercel): Routes through serverless /api/generate-briefing endpoint
- *    where GEMINI_API_KEY remains server-side.
- * 2. Local Development / Static Preview: Falls back to @google/generative-ai using
- *    import.meta.env.VITE_GEMINI_API_KEY when /api/generate-briefing is not served.
- */
+import { getHealthAdvisory } from '../analytics/aqiCalculator.js';
+import { getAuthenticatedIdToken } from '../googleServices.js';
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+const POLLUTANTS = ['pm25', 'pm10', 'no2', 'so2', 'co', 'o3'];
+const FALLBACK_STATUSES = new Set([404, 408, 429, 500, 502, 503, 504]);
 
-function buildPromptFacts(analytics, datasetMetadata = {}) {
+function compactAnalytics(analytics) {
+  const pollutantStats = Object.fromEntries(
+    POLLUTANTS
+      .filter((pollutant) => analytics.pollutantStats?.[pollutant])
+      .map((pollutant) => {
+        const stats = analytics.pollutantStats[pollutant];
+        return [pollutant, {
+          mean: stats.mean,
+          max: stats.max,
+          p95: stats.p95
+        }];
+      })
+  );
+  const compactHotspot = (hotspot) => hotspot ? {
+    ward: hotspot.ward,
+    meanPM25: hotspot.meanPM25,
+    maxPM25: hotspot.maxPM25,
+    severeExceedances: hotspot.severeExceedances,
+    exceedanceRate: hotspot.exceedanceRate
+  } : null;
+
   return {
-    incidentTitle: datasetMetadata.title || 'Regional Air Quality Assessment',
-    totalObservations: analytics.totalRows,
-    overallAQI: analytics.aqi.aqi,
-    aqiCategory: analytics.aqi.category,
-    dominantPollutant: analytics.aqi.dominantPollutant,
-    dataCompletenessPercent: analytics.completeness,
-    dataConfidenceTier: analytics.confidenceTier,
-    totalMissingValues: analytics.totalMissing,
-    anomaliesDetectedCount: analytics.anomaliesSummary?.total || 0,
-    primaryHotspot: analytics.primaryHotspot ? {
-      ward: analytics.primaryHotspot.ward,
-      meanPM25: analytics.primaryHotspot.meanPM25,
-      maxPM25: analytics.primaryHotspot.maxPM25,
-      severeExceedances: analytics.primaryHotspot.severeExceedances
-    } : 'None detected',
-    hotspotsRanking: (analytics.hotspots || []).slice(0, 3).map(h => ({
-      ward: h.ward,
-      meanPM25: h.meanPM25,
-      maxPM25: h.maxPM25,
-      exceedanceRatePercent: h.exceedanceRate
-    })),
+    totalRows: analytics.totalRows,
+    aqi: {
+      aqi: analytics.aqi?.aqi,
+      category: analytics.aqi?.category,
+      dominantPollutant: analytics.aqi?.dominantPollutant,
+      isCompleteOfficialAQI: analytics.aqi?.isCompleteOfficialAQI,
+      hasSufficientTemporalData: analytics.aqi?.hasSufficientTemporalData
+    },
+    completeness: analytics.completeness,
+    confidenceTier: analytics.confidenceTier,
+    totalMissing: analytics.totalMissing,
+    anomaliesSummary: { total: analytics.anomaliesSummary?.total || 0 },
+    primaryHotspot: compactHotspot(analytics.primaryHotspot),
+    hotspots: (analytics.hotspots || []).slice(0, 3).map(compactHotspot),
     peakExposureWindow: analytics.peakExposureWindow,
-    pollutantsSummary: Object.entries(analytics.pollutantStats || {}).map(([pol, s]) => ({
-      pollutant: pol,
-      meanConcentration: s.mean,
-      maxConcentration: s.max,
-      p95Concentration: s.p95
-    }))
+    pollutantStats
   };
 }
 
-const SYSTEM_INSTRUCTIONS = `
-You are the Chief Environmental Science Intelligence Officer for a municipal metropolitan authority.
-Synthesize an evidence-grounded briefing based SOLELY on the provided deterministic mathematical facts.
+function formatNumber(value) {
+  return Number.isFinite(value) ? String(value) : 'not available';
+}
 
-STRICT CONSTRAINTS (ZERO-HALLUCINATION POLICY):
-1. Do NOT calculate or invent measurements. Cite the EXACT metrics, concentrations, wards, and peak windows given in the facts.
-2. If data for a ward or pollutant is omitted, do NOT make assumptions. Explicitly list it under uncertaintyNotes.
-3. Every recommendation for Ward Officers, Housing Societies, and Schools must directly cite an evidence metric from the facts.
-4. Output MUST be valid JSON adhering strictly to the schema below.
+export function createRuleBasedBriefing(analytics, reason = 'Gemini service is unavailable.') {
+  const aqiValue = analytics?.aqi?.aqi;
+  const category = analytics?.aqi?.category || 'Unclassified';
+  const pollutant = analytics?.aqi?.dominantPollutant?.toUpperCase() || 'unavailable pollutant';
+  const hotspot = analytics?.primaryHotspot;
+  const hotspotName = hotspot?.ward || 'No hotspot identified';
+  const meanPM25 = analytics?.pollutantStats?.pm25?.mean;
+  const advisory = getHealthAdvisory(category, 'en');
+  const hindiAdvisory = getHealthAdvisory(category, 'hi');
+  const evidence = `Calculated AQI ${formatNumber(aqiValue)} (${category}); dominant pollutant: ${pollutant}.`;
+  const riskIsElevated = Number.isFinite(aqiValue) && aqiValue > 100;
+  const criticalRisk = Number.isFinite(aqiValue) && aqiValue > 300;
+  const observedGaps = [];
 
-JSON SCHEMA:
-{
-  "executiveSummary": "2-3 sentence administrative summary of incident scale and exposure risk",
-  "airQualityStatus": "Short status headline",
-  "confidenceAssessment": "Evaluation of data completeness and sensor fidelity",
-  "wardOfficer": {
-    "priority": "HIGH | MEDIUM | LOW",
-    "actions": ["Specific operational enforcement step 1", "Step 2", "Step 3"],
-    "enforcementDirectives": "Formal municipal administrative mandate",
-    "evidenceMetric": "Specific metric cited as legal/operational justification"
-  },
-  "housingSociety": {
-    "priority": "HIGH | MEDIUM | LOW",
-    "actions": ["Specific facility action 1", "Action 2"],
-    "residentAdvisory": "Guidance for HVAC filtration, elderly residents, and children",
-    "evidenceMetric": "Specific metric cited"
-  },
-  "schoolAdmin": {
-    "priority": "CRITICAL | HIGH | MEDIUM",
-    "actions": ["Specific school protocol 1", "Protocol 2"],
-    "activityRestrictions": "Assembly cancellation, physical education policy",
-    "evidenceMetric": "Specific metric cited"
-  },
-  "citizenAdvisory": {
-    "english": {
-      "headline": "Plain language alert headline",
-      "generalPublic": "Concise advice for commute and outdoor activities",
-      "vulnerableGroups": "Targeted advice for children, asthmatics, and seniors"
+  if ((analytics?.totalMissing || 0) > 0) {
+    observedGaps.push(`${analytics.totalMissing} pollutant readings are missing`);
+  }
+  if ((analytics?.anomaliesSummary?.total || 0) > 0) {
+    observedGaps.push(`${analytics.anomaliesSummary.total} sensor anomalies were flagged`);
+  }
+  if (analytics?.confidenceTier && analytics.confidenceTier !== 'HIGH') {
+    observedGaps.push(`data confidence is ${analytics.confidenceTier}`);
+  }
+  if (!analytics?.aqi?.isCompleteOfficialAQI) {
+    observedGaps.push('the available pollutant coverage does not meet the full CPCB AQI parameter requirement');
+  }
+  if (analytics?.aqi?.hasSufficientTemporalData === false) {
+    observedGaps.push('temporal coverage is below the CPCB 16-hour qualification');
+  }
+
+  const data = {
+    executiveSummary: `This ${analytics?.isBenchmark ? 'benchmark' : 'submitted'} dataset contains ${formatNumber(analytics?.totalRows)} observations. ${evidence} This is an analytical summary, not a causal source attribution or official order.`,
+    airQualityStatus: `Calculated status: ${category}`,
+    confidenceAssessment: `${analytics?.confidenceTier || 'UNAVAILABLE'} confidence; ${formatNumber(analytics?.completeness)}% data completeness.`,
+    wardOfficer: {
+      priority: criticalRisk ? 'HIGH' : riskIsElevated ? 'MEDIUM' : 'LOW',
+      actions: [
+        hotspot ? `Review monitoring and dust-control activity for ${hotspotName}; observed mean PM2.5 is ${formatNumber(meanPM25)} µg/m³.` : 'Review station-level records before targeting enforcement.',
+        `Use ${evidence} as a screening signal, not as sole legal evidence.`,
+        'Confirm conditions with an authorized monitoring source before issuing enforcement orders.'
+      ],
+      enforcementDirectives: 'This rule-based screening note is advisory only; competent-authority review is required before enforcement.',
+      evidenceMetric: evidence
     },
-    "hindi": {
-      "headline": "हिंदी में सरल और स्पष्ट शीर्षक",
-      "generalPublic": "आम जनता के लिए सरल स्वास्थ्य निर्देश",
-      "vulnerableGroups": "बच्चों, बुजुर्गों और सांस के मरीजों के लिए विशेष सावधानी"
-    }
-  },
-  "uncertaintyNotes": "Explicit note on missing data, sensor flatlines, or unmonitored wards"
-}`;
-
-async function clientSideGeminiFallback(analytics, datasetMetadata) {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      'Serverless route /api/generate-briefing returned 404 and VITE_GEMINI_API_KEY is not configured in local environment.'
-    );
-  }
-
-  const promptFacts = buildPromptFacts(analytics, datasetMetadata);
-  const promptContent = `System Instructions:\n${SYSTEM_INSTRUCTIONS}\n\nDeterministic Input Facts:\n${JSON.stringify(promptFacts, null, 2)}\n\nProduce the complete structured JSON response:`;
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const modelCandidates = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'];
-  let lastErr = null;
-
-  for (const modelName of modelCandidates) {
-    try {
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: {
-          temperature: 0.15,
-          responseMimeType: 'application/json'
-        }
-      });
-      const result = await model.generateContent(promptContent);
-      const text = result.response.text();
-      let parsed;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
-        parsed = JSON.parse(cleaned);
+    housingSociety: {
+      priority: riskIsElevated ? 'HIGH' : 'LOW',
+      actions: [
+        'Check indoor filtration and share the current air-quality advisory with residents.',
+        `Consider limiting strenuous outdoor activity when the calculated category is ${category}.`
+      ],
+      residentAdvisory: advisory,
+      evidenceMetric: evidence
+    },
+    schoolAdmin: {
+      priority: criticalRisk ? 'CRITICAL' : riskIsElevated ? 'HIGH' : 'MEDIUM',
+      actions: [
+        `Review outdoor activity plans against the calculated category (${category}).`,
+        'Follow school health protocols for students with respiratory conditions.'
+      ],
+      activityRestrictions: `Use the reported ${category} category and current official local guidance when deciding outdoor activity restrictions.`,
+      evidenceMetric: evidence
+    },
+    citizenAdvisory: {
+      english: {
+        headline: `Air-quality category: ${category}`,
+        generalPublic: advisory,
+        vulnerableGroups: 'Children, older adults, and people with heart or lung conditions should follow local health guidance and seek medical care for concerning symptoms.'
+      },
+      hindi: {
+        headline: `वायु गुणवत्ता श्रेणी: ${category}`,
+        generalPublic: hindiAdvisory,
+        vulnerableGroups: 'बच्चे, बुजुर्ग और हृदय या फेफड़ों की समस्या वाले लोग स्थानीय स्वास्थ्य निर्देशों का पालन करें।'
       }
-      return {
-        success: true,
-        modelUsed: modelName,
-        data: parsed,
-        rawFacts: promptFacts,
-        timestamp: new Date().toISOString()
-      };
-    } catch (err) {
-      lastErr = err;
-      if (err.message && (err.message.includes('404') || err.message.includes('not found'))) {
-        continue;
-      }
-      throw err;
-    }
-  }
+    },
+    uncertaintyNotes: observedGaps.length
+      ? `${observedGaps.join('; ')}. Source attribution and causal conclusions are not available from these aggregate readings.`
+      : 'No missing readings or flagged anomalies were reported in the supplied aggregate. Source attribution and causal conclusions are not available from these aggregate readings.'
+  };
 
-  throw lastErr || new Error('Client-side model synthesis failed.');
+  return {
+    success: true,
+    source: 'rule-based-fallback',
+    modelUsed: 'Deterministic rule-based fallback',
+    fallbackReason: reason,
+    data,
+    timestamp: new Date().toISOString()
+  };
+}
+
+function isValidBriefingResponse(result) {
+  const data = result?.data;
+  return result?.success === true &&
+    data && typeof data === 'object' &&
+    typeof data.executiveSummary === 'string' &&
+    typeof data.uncertaintyNotes === 'string';
 }
 
 export async function generateGroundedBriefings(analytics, datasetMetadata = {}) {
+  if (!analytics || typeof analytics !== 'object' || !analytics.aqi) {
+    throw new Error('A valid calculated analytics result is required to generate a briefing.');
+  }
+
+  const payload = {
+    analytics: compactAnalytics(analytics),
+    datasetMetadata: {
+      title: typeof datasetMetadata.title === 'string'
+        ? datasetMetadata.title.slice(0, 120)
+        : 'Regional Air Quality Assessment'
+    }
+  };
+  let idToken;
+  try {
+    idToken = await getAuthenticatedIdToken();
+  } catch {
+    return createRuleBasedBriefing(analytics, 'A Firebase authentication token could not be obtained.');
+  }
+  if (!idToken) {
+    return createRuleBasedBriefing(analytics, 'Live Gemini synthesis requires an authenticated Firebase account.');
+  }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
   try {
     const response = await fetch('/api/generate-briefing', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ analytics, datasetMetadata })
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal
     });
 
-    if (response.ok) {
-      return await response.json();
-    }
-
-    if (response.status !== 404) {
-      let errorMsg = `Server error (${response.status})`;
+    if (!response.ok) {
+      let message = `Gemini service returned HTTP ${response.status}.`;
       try {
-        const errData = await response.json();
-        if (errData && errData.error) errorMsg = errData.error;
+        const body = await response.json();
+        if (typeof body?.error === 'string') message = body.error;
       } catch {
-        // non-JSON error
+        // Keep the generic status message when the endpoint response is not JSON.
       }
-      throw new Error(errorMsg);
+      if (FALLBACK_STATUSES.has(response.status)) {
+        return createRuleBasedBriefing(analytics, message);
+      }
+      throw new Error(message);
     }
-  } catch (err) {
-    if (!err.message?.includes('404') && !err.message?.includes('Failed to fetch') && !err.message?.includes('NetworkError')) {
-      throw err;
-    }
-  }
 
-  // 404 / Dev Server Fallback: Use client-side Google SDK with import.meta.env.VITE_GEMINI_API_KEY
-  return await clientSideGeminiFallback(analytics, datasetMetadata);
+    const result = await response.json();
+    if (!isValidBriefingResponse(result)) {
+      return createRuleBasedBriefing(analytics, 'The synthesis service returned an invalid response.');
+    }
+    return { ...result, source: 'gemini' };
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      return createRuleBasedBriefing(analytics, 'The Gemini request timed out.');
+    }
+    if (error instanceof TypeError) {
+      return createRuleBasedBriefing(analytics, 'The Gemini service could not be reached.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }

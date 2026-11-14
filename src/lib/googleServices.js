@@ -1,58 +1,99 @@
-import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { getFirestore, collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { getApps, initializeApp } from 'firebase/app';
+import {
+  browserLocalPersistence,
+  browserSessionPersistence,
+  createUserWithEmailAndPassword,
+  getAuth,
+  GoogleAuthProvider,
+  sendPasswordResetEmail,
+  setPersistence,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  signOut
+} from 'firebase/auth';
+import { addDoc, collection, getFirestore, serverTimestamp } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "demo-key",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "demo.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "demo-project",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+const hasFirebaseConfig = Boolean(
+  firebaseConfig.apiKey &&
+  firebaseConfig.authDomain &&
+  firebaseConfig.projectId &&
+  firebaseConfig.appId
+);
+const app = hasFirebaseConfig
+  ? getApps()[0] || initializeApp(firebaseConfig)
+  : null;
+
+export const auth = app ? getAuth(app) : null;
+export const db = app ? getFirestore(app) : null;
 export const googleProvider = new GoogleAuthProvider();
 
-const geminiApiKey = (import.meta.env.VITE_GEMINI_API_KEY || "").trim();
-const genAI = geminiApiKey ? new GoogleGenerativeAI(geminiApiKey) : null;
-export const geminiModel = geminiApiKey && genAI ? genAI.getGenerativeModel({ model: "gemini-1.5-flash" }) : null;
-
-export function ensureGeminiConfigured() {
-  if (!geminiModel) {
-    throw new Error("Google Gemini API key is missing. Add VITE_GEMINI_API_KEY to your environment.");
+function requireAuth() {
+  if (!auth) {
+    throw new Error('Firebase Authentication is not configured. Use the clearly labeled demo or configure Firebase.');
   }
+  return auth;
 }
 
-export function sanitizeInput(text) {
-  if (typeof text !== "string") return "";
-  return text.trim().replace(/[<>]/g, "").slice(0, 2000);
+export async function signInWithEmail(email, password, rememberMe) {
+  const firebaseAuth = requireAuth();
+  await setPersistence(
+    firebaseAuth,
+    rememberMe ? browserLocalPersistence : browserSessionPersistence
+  );
+  return signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
 }
 
-export async function generateAIResponse(rawPrompt) {
-  const cleanPrompt = sanitizeInput(rawPrompt);
-  if (!cleanPrompt) throw new Error("Prompt cannot be empty");
-  ensureGeminiConfigured();
-  const result = await geminiModel.generateContent(cleanPrompt);
-  return result.response.text();
+export async function createEmailAccount(email, password, rememberMe) {
+  const firebaseAuth = requireAuth();
+  await setPersistence(
+    firebaseAuth,
+    rememberMe ? browserLocalPersistence : browserSessionPersistence
+  );
+  return createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
+}
+
+export async function sendPasswordReset(email) {
+  return sendPasswordResetEmail(requireAuth(), email.trim());
+}
+
+export async function loginWithGoogle(rememberMe = true) {
+  const firebaseAuth = requireAuth();
+  await setPersistence(
+    firebaseAuth,
+    rememberMe ? browserLocalPersistence : browserSessionPersistence
+  );
+  return signInWithPopup(firebaseAuth, googleProvider);
+}
+
+export async function signOutUser() {
+  if (auth) await signOut(auth);
+}
+
+export async function getAuthenticatedIdToken() {
+  return auth?.currentUser ? auth.currentUser.getIdToken() : null;
 }
 
 export async function saveLogToFirestore(collectionName, payload) {
   if (!db || !collectionName) {
-    throw new Error("Firestore is not configured for this environment.");
+    throw new Error('Firestore is not configured for this environment.');
   }
-  return await addDoc(collection(db, collectionName), {
+  if (!auth?.currentUser) {
+    throw new Error('An authenticated Firebase user is required to save a cloud log.');
+  }
+  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(collectionName)) {
+    throw new Error('Invalid Firestore subcollection name.');
+  }
+  return addDoc(collection(db, 'users', auth.currentUser.uid, collectionName), {
     ...payload,
-    createdAt: serverTimestamp(),
+    createdAt: serverTimestamp()
   });
-}
-
-export async function loginWithGoogle() {
-  if (!auth) {
-    throw new Error("Google authentication is not configured in this environment.");
-  }
-  return await signInWithPopup(auth, googleProvider);
 }

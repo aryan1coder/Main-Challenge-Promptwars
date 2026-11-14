@@ -340,7 +340,7 @@ export default function AnalyticsCharts({ analytics, parsedResult }) {
         </div>
       </div>
 
-      {/* Second Grid: Diurnal Inversion Curve + Multi-Pollutant Distribution + Confidence Grid */}
+      {/* Second Grid: Observed Diurnal Profile + Multi-Pollutant Distribution + Confidence Grid */}
       <div className="charts-secondary-grid">
         {/* Chart D: Diurnal Exposure Profile (24-Hour Inversion Curve) */}
         <div className="civic-card diurnal-card">
@@ -348,8 +348,8 @@ export default function AnalyticsCharts({ analytics, parsedResult }) {
             <div className="flex-row items-center gap-2">
               <Clock size={18} className="text-civic-blue" aria-hidden="true" />
               <div>
-                <h3 className="chart-card-title">Diurnal Exposure Cycle (24 Hours)</h3>
-                <span className="chart-card-meta">Hourly variation showing atmospheric boundary layer entrapment</span>
+                <h3 className="chart-card-title">Observed Hourly PM2.5 Profile</h3>
+                <span className="chart-card-meta">Hourly means calculated from the supplied observations</span>
               </div>
             </div>
             <span className="peak-window-pill">
@@ -381,7 +381,7 @@ export default function AnalyticsCharts({ analytics, parsedResult }) {
           <div className="diurnal-explanation-note">
             <Info size={14} className="text-civic-blue" aria-hidden="true" />
             <span>
-              <strong>Diurnal Phenomenon:</strong> Elevated morning concentrations reflect boundary layer contraction and meteorological surface temperature inversions trapping emissions before solar heating induces convective dispersal.
+              This chart shows the supplied hourly readings only. Weather and emissions-source data are not included, so it does not identify causes.
             </span>
           </div>
         </div>

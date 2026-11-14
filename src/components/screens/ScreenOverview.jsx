@@ -148,7 +148,7 @@ export default function ScreenOverview({
               </div>
             </div>
 
-            {/* Benchmark vs WHO Guidelines */}
+            {/* Calculated summary indicators */}
             <div className="hero-comparative-stats">
               <div className="stat-card-glass">
                 <span className="stat-label">Primary Pollutant</span>
@@ -170,17 +170,18 @@ export default function ScreenOverview({
               <p className="advisory-text">
                 {aqi.aqi > 300 ? (
                   <>
-                    <strong>Emergency Atmospheric Protocol Active:</strong> Suspend all outdoor school assemblies,
-                    halt construction earthworks, and activate mechanical dust sweeping in affected wards.
+                    <strong>Severe reading advisory:</strong> Limit strenuous outdoor activity and follow current
+                    official public-health guidance. This dashboard cannot issue statutory orders.
                   </>
                 ) : aqi.aqi > 100 ? (
                   <>
-                    <strong>Precautionary Public Advisory:</strong> Sensitive groups (children, asthmatics, elderly)
-                    should limit strenuous outdoor exercise during peak morning inversion.
+                    <strong>Precautionary public advisory:</strong> Sensitive groups should follow local health
+                    guidance for the calculated air-quality category. No meteorological cause is inferred.
                   </>
                 ) : (
                   <>
-                    <strong>Ambient Air Optimal:</strong> Atmospheric dispersion is favorable across municipal corridors.
+                    <strong>Calculated AQI is below the elevated-risk threshold.</strong> Continue to follow current
+                    local air-quality advisories; this dataset does not measure atmospheric dispersion.
                   </>
                 )}
               </p>
@@ -354,7 +355,7 @@ export default function ScreenOverview({
           </div>
           <div className="shortcut-text-block">
             <h3>Generate AI Briefing Note</h3>
-            <p>Synthesize evidence-grounded municipal briefings and bilingual public advisories with Gemini 1.5 Flash.</p>
+            <p>Generate a source-labeled Gemini briefing or a deterministic rule-based fallback from calculated metrics.</p>
           </div>
           <ArrowRight size={18} className="shortcut-arrow text-primary" />
         </div>

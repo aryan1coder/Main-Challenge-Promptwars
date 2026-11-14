@@ -1,309 +1,185 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  Truck,
-  School,
   Building,
-  Navigation,
   CheckCircle2,
-  FileCheck
+  FileCheck,
+  Globe,
+  School,
+  Truck
 } from 'lucide-react';
+import { getHealthAdvisory } from '../../lib/analytics/aqiCalculator';
 
-export default function ScreenDirectives({ analytics, selectedRole = 'ward' }) {
-  const targetPersona = selectedRole === 'citizen' ? 'traffic' : (selectedRole || 'ward');
-  const [prevSelectedRole, setPrevSelectedRole] = useState(selectedRole);
-  const [activePersona, setActivePersona] = useState(targetPersona);
+const PERSONAS = [
+  { id: 'ward', label: 'Ward Environmental Officer', icon: Truck },
+  { id: 'school', label: 'School Administrator', icon: School },
+  { id: 'housing', label: 'Housing Society Manager', icon: Building },
+  { id: 'citizen', label: 'Public Citizen', icon: Globe }
+];
 
-  if (prevSelectedRole !== selectedRole) {
-    setPrevSelectedRole(selectedRole);
-    setActivePersona(targetPersona);
+function getPersonaActions(role, analytics, aqi) {
+  const hotspot = analytics?.primaryHotspot;
+  const category = analytics?.aqi?.category;
+  const elevated = Number.isFinite(aqi) && aqi > 100;
+  const sourceReview = 'Confirm current conditions with an authorized monitoring source before taking formal action.';
+
+  if (!Number.isFinite(aqi)) {
+    return ['Upload valid observations to calculate an AQI and evidence-linked guidance.'];
   }
 
-  const [priorityFilter, setPriorityFilter] = useState('all');
-  const [completedTasks, setCompletedTasks] = useState({});
+  switch (role) {
+    case 'ward':
+      return [
+        hotspot
+          ? `Review the station ranked highest by mean PM2.5: ${hotspot.ward} (${hotspot.meanPM25 ?? 'N/A'} µg/m³).`
+          : 'Review station-level records; no spatial hotspot was identified.',
+        elevated ? 'Review applicable local dust-control and monitoring procedures.' : 'Continue routine monitoring and retain the underlying observations.',
+        sourceReview
+      ];
+    case 'school':
+      return [
+        elevated ? `Review outdoor activity plans against the calculated ${category} category.` : 'Continue to check current local air-quality advisories before outdoor activities.',
+        'Follow school health procedures for students with respiratory conditions.',
+        sourceReview
+      ];
+    case 'housing':
+      return [
+        elevated ? 'Share the calculated air-quality category with residents and review indoor filtration readiness.' : 'Share the current dataset summary with residents.',
+        'Check that residents can access the current official local health advisory.',
+        sourceReview
+      ];
+    case 'citizen':
+      return [
+        getHealthAdvisory(category, 'en'),
+        'Children, older adults, and people with heart or lung conditions should follow local health guidance.',
+        'This dataset is not a substitute for current official alerts or personal medical advice.'
+      ];
+    default:
+      return [sourceReview];
+  }
+}
 
-  const toggleTask = (taskId) => {
-    setCompletedTasks(prev => ({ ...prev, [taskId]: !prev[taskId] }));
-  };
-
-  const primaryHotspot = analytics?.primaryHotspot || { ward: 'Central Hotspot Ward', meanPM25: 350 };
-  const aqiVal = analytics?.aqi?.aqi || 250;
-
-  // Personas definitions with real grounded triggers
-  const personas = [
-    {
-      id: 'ward',
-      label: 'Ward Environmental Officers',
-      icon: Truck,
-      count: 4,
-      protocols: [
-        {
-          id: 'w1',
-          code: 'PROTOCOL-ENFORCE-01',
-          priority: 'CRITICAL',
-          title: 'Deploy High-Pressure Water Misting Cannons & Mechanical Sweeping',
-          target: `${primaryHotspot.ward} Transit Spine`,
-          trigger: `Mean PM2.5 (${primaryHotspot.meanPM25} µg/m³) exceeds 250 µg/m³ severe threshold`,
-          evidence: `Station Telemetry: ${primaryHotspot.meanPM25} µg/m³ peak observed at 08:00`,
-          actions: [
-            'Deploy 4 mobile misting trucks along the arterial corridor spine.',
-            'Activate nighttime vacuum sweeping across unpaved road shoulders.',
-            'Suspend open earthmoving operations on all municipal construction sites.'
-          ],
-          statutoryNotice: 'Enacted under Section 18(1)(b) of the Air (Prevention and Control of Pollution) Act, 1981.'
-        },
-        {
-          id: 'w2',
-          code: 'PROTOCOL-ENFORCE-02',
-          priority: 'CRITICAL',
-          title: 'Mandatory Non-Essential Heavy Diesel Vehicle Corridor Diversion',
-          target: 'Industrial Logistics Ring Bypass',
-          trigger: 'NO₂ and PM10 cross-correlation exceeding diurnal baseline by 45%',
-          evidence: `Peak Inversion Window: ${analytics?.peakExposureWindow || '08:00 - 10:00'}`,
-          actions: [
-            'Divert heavy freight transit (Euro-IV and below) to peripheral expressways.',
-            'Deploy traffic marshals at peripheral toll gates to enforce bypass.'
-          ],
-          statutoryNotice: 'GRAP Stage-IV Directive issued by Commission for Air Quality Management (CAQM).'
-        }
-      ]
-    },
-    {
-      id: 'school',
-      label: 'School & Educational Admins',
-      icon: School,
-      count: 3,
-      protocols: [
-        {
-          id: 's1',
-          code: 'PROTOCOL-EDU-101',
-          priority: 'CRITICAL',
-          title: 'Suspend Outdoor Physical Education & Morning Open-Air Assemblies',
-          target: `All primary & secondary institutions in ${primaryHotspot.ward}`,
-          trigger: `AQI (${aqiVal}) sustained in Severe/Very Poor range`,
-          evidence: `Respiratory Hazard Threshold breached: PM2.5 > 250 µg/m³`,
-          actions: [
-            'Conduct morning announcements and prayer assemblies in enclosed auditoriums.',
-            'Cancel all outdoor sports, running tracks, and open-ground physical activities.',
-            'Provide indoor recess options with active HEPA air filtration.'
-          ],
-          statutoryNotice: 'Municipal Department of Education Health Advisory Notice Ref: 2026/AQ-EDU-4.'
-        },
-        {
-          id: 's2',
-          code: 'PROTOCOL-EDU-102',
-          priority: 'ELEVATED',
-          title: 'Notification & Protective Measures for Asthmatic & Sensitive Students',
-          target: 'Student Health Register Cohort',
-          trigger: 'Fine particulate mass elevated during drop-off and pick-up hours',
-          evidence: `Diurnal Peak Phase: ${analytics?.peakExposureWindow || '08:00 - 10:00'}`,
-          actions: [
-            'Notify parents of asthmatic children to keep prescribed bronchodilator inhalers on hand.',
-            'Ensure school nurse station has functional nebulizers and clean oxygen support.',
-            'Permit voluntary distance learning for students with documented chronic respiratory ailments.'
-          ],
-          statutoryNotice: 'WHO Pediatric Air Quality Safety Framework Compliance.'
-        }
-      ]
-    },
-    {
-      id: 'housing',
-      label: 'Housing & Facility Managers',
-      icon: Building,
-      count: 3,
-      protocols: [
-        {
-          id: 'h1',
-          code: 'PROTOCOL-RES-201',
-          priority: 'CRITICAL',
-          title: 'HVAC Air Intake Filtration Cycling & Positive Pressure Seal',
-          target: 'Multi-story Residential & Commercial Societies',
-          trigger: `Ground-level PM2.5 accumulation (${primaryHotspot.meanPM25} µg/m³)`,
-          evidence: `Nocturnal Inversion Layer trapping ground plumes below 400m`,
-          actions: [
-            'Switch central air handlers to 100% recirculation mode with MERV-13/HEPA filters.',
-            'Inspect and seal perimeter weather-stripping on residential corridors and lift lobbies.',
-            'Issue building advisory to keep apartment windows closed between 18:00 and 10:00.'
-          ],
-          statutoryNotice: 'Resident Welfare Association Emergency Health Safety Directive.'
-        },
-        {
-          id: 'h2',
-          code: 'PROTOCOL-RES-202',
-          priority: 'STANDARD',
-          title: 'Elder Care & Community Common Room Clean Air Shelter',
-          target: 'Senior Citizen Centers & Clubhouse Air Shelters',
-          trigger: 'Ambient particulate mass posing prolonged exposure risk to elderly residents',
-          evidence: 'Cardiovascular stress correlation confirmed in high particulate conditions',
-          actions: [
-            'Designate community center as an active Clean Air Refuge running continuous purifiers.',
-            'Distribute N95/FFP2 masks at security gates for residents requiring essential outdoor trips.'
-          ],
-          statutoryNotice: 'National Health Mission Advisory on Senior Citizen Winter Smog Protection.'
-        }
-      ]
-    },
-    {
-      id: 'traffic',
-      label: 'Transit & Traffic Command',
-      icon: Navigation,
-      count: 2,
-      protocols: [
-        {
-          id: 't1',
-          code: 'PROTOCOL-TRF-301',
-          priority: 'CRITICAL',
-          title: 'Synchronized Green Wave Corridor Signalization for Transit Bottlenecks',
-          target: `${primaryHotspot.ward} Junction Networks`,
-          trigger: 'Vehicular idling generating severe localized combustion gas peaks (NO₂)',
-          evidence: `Combustion gas index: ${analytics?.pollutantStats?.no2?.mean || 85} µg/m³`,
-          actions: [
-            'Extend green phase on heavy traffic arteries to minimize vehicle idling emissions.',
-            'Restrict unloader parking on primary thoroughfares between 07:00 and 11:00.'
-          ],
-          statutoryNotice: 'Urban Transport Governance Authority Emergency Corridor Order.'
-        }
-      ]
-    }
+export default function ScreenDirectives({ analytics, selectedRole = 'ward' }) {
+  const initialRole = PERSONAS.some((persona) => persona.id === selectedRole) ? selectedRole : 'ward';
+  const [activePersona, setActivePersona] = useState(initialRole);
+  const [reviewedTasks, setReviewedTasks] = useState({});
+  useEffect(() => {
+    if (PERSONAS.some((item) => item.id === selectedRole)) setActivePersona(selectedRole);
+  }, [selectedRole]);
+  const persona = PERSONAS.find((item) => item.id === activePersona) || PERSONAS[0];
+  const Icon = persona.icon;
+  const aqi = Number.isFinite(analytics?.aqi?.aqi) ? analytics.aqi.aqi : null;
+  const category = analytics?.aqi?.category || 'Unavailable';
+  const hotspot = analytics?.primaryHotspot;
+  const confidence = analytics?.confidenceTier || 'Unavailable';
+  const actions = getPersonaActions(activePersona, analytics, aqi);
+  const evidence = [
+    `AQI: ${aqi ?? 'N/A'} (${category})`,
+    `Confidence: ${confidence}`,
+    hotspot
+      ? `Highest-ranked station: ${hotspot.ward}; mean PM2.5 ${hotspot.meanPM25 ?? 'N/A'} µg/m³`
+      : 'Spatial hotspot: not identified'
   ];
 
-  const currentPersona = personas.find(p => p.id === activePersona) || personas[0];
-  const filteredProtocols = currentPersona.protocols.filter(p => {
-    if (priorityFilter === 'all') return true;
-    return p.priority.toLowerCase() === priorityFilter.toLowerCase();
-  });
+  const toggleReviewed = (actionIndex) => {
+    const key = `${activePersona}-${actionIndex}`;
+    setReviewedTasks((current) => ({ ...current, [key]: !current[key] }));
+  };
 
   return (
     <div className="stitch-screen-container">
-      {/* Header Bar */}
       <section className="screen-header-bar">
         <div className="header-meta-group">
           <div className="header-breadcrumbs">
-            <span className="pulse-indicator-emerald"></span>
+            <span className="pulse-indicator-emerald" />
             <span className="breadcrumb-root">Operational Governance</span>
             <span className="breadcrumb-separator">/</span>
-            <span className="breadcrumb-active">Role-Specific Interventions</span>
+            <span className="breadcrumb-active">Role-Specific Guidance</span>
           </div>
-          <h1 className="header-main-title">Actionable Civic Directives &amp; Playbooks</h1>
+          <h1 className="header-main-title">Role-Tailored Decision Support</h1>
           <p className="header-subtitle">
-            Tailored emergency standard operating procedures (SOPs) triggered deterministically
-            by mathematical thresholds. Every directive links explicitly to verified sensor observations.
+            Review evidence-linked considerations for each audience. These are advisory prompts, not executed tasks,
+            statutory orders, or a substitute for current official guidance.
           </p>
         </div>
       </section>
 
-      {/* Stakeholder Navigation Tabs */}
-      <section className="directives-nav-strip">
-        <div className="persona-tabs-group">
-          {personas.map((persona) => {
-            const Icon = persona.icon;
-            const isActive = activePersona === persona.id;
+      <section className="directives-nav-strip" aria-label="Select stakeholder audience">
+        <div className="persona-tabs-group" role="tablist" aria-label="Stakeholder audiences">
+          {PERSONAS.map((item) => {
+            const PersonaIcon = item.icon;
             return (
               <button
-                key={persona.id}
+                key={item.id}
                 type="button"
-                className={`persona-tab-btn ${isActive ? 'active' : ''}`}
-                onClick={() => setActivePersona(persona.id)}
+                role="tab"
+                aria-selected={activePersona === item.id}
+                className={`persona-tab-btn ${activePersona === item.id ? 'active' : ''}`}
+                onClick={() => setActivePersona(item.id)}
               >
-                <Icon size={16} />
-                <span>{persona.label}</span>
-                <span className="persona-badge-count">{persona.count}</span>
+                <PersonaIcon size={16} aria-hidden="true" />
+                <span>{item.label}</span>
               </button>
             );
           })}
         </div>
-
-        {/* Priority Filter */}
-        <div className="directives-filter-box">
-          <span className="filter-label">Filter:</span>
-          <select
-            value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value)}
-            className="priority-select"
-          >
-            <option value="all">All Playbooks</option>
-            <option value="critical">Critical Immediate</option>
-            <option value="elevated">Elevated Precaution</option>
-            <option value="standard">Standard Protocol</option>
-          </select>
-        </div>
       </section>
 
-      {/* Directives Protocols Stack */}
-      <section className="directives-protocols-stack">
-        {filteredProtocols.map((protocol) => (
-          <div key={protocol.id} className="directive-playbook-card-glass">
-            <div className="playbook-top-bar">
-              <div className="playbook-badges">
-                <span
-                  className={`priority-pill ${
-                    protocol.priority === 'CRITICAL'
-                      ? 'priority-critical'
-                      : protocol.priority === 'ELEVATED'
-                      ? 'priority-elevated'
-                      : 'priority-standard'
-                  }`}
-                >
-                  {protocol.priority === 'CRITICAL' && (
-                    <span className="pulse-dot-crimson"></span>
-                  )}
-                  {protocol.priority} IMMEDIATE
-                </span>
-                <span className="protocol-code">{protocol.code}</span>
-              </div>
-
-              <div className="playbook-target-location">
-                <Navigation size={13} className="text-secondary" />
-                <span>Jurisdiction: <strong>{protocol.target}</strong></span>
-              </div>
+      <section className="directives-protocols-stack" aria-labelledby="guidance-heading">
+        <article className="directive-playbook-card-glass">
+          <div className="playbook-top-bar">
+            <div className="playbook-badges">
+              <span className={`priority-pill ${aqi !== null && aqi > 300 ? 'priority-critical' : 'priority-standard'}`}>
+                {aqi !== null && aqi > 300 ? 'HIGH-READING REVIEW' : 'ADVISORY REVIEW'}
+              </span>
+              <span className="protocol-code">CALCULATED AQI SCREENING</span>
             </div>
-
-            <h2 className="playbook-title">{protocol.title}</h2>
-
-            {/* Grounding & Evidence Strip */}
-            <div className="playbook-evidence-strip">
-              <div className="evidence-item">
-                <span className="evidence-label">Algorithmic Trigger:</span>
-                <span className="evidence-value text-error font-medium">{protocol.trigger}</span>
-              </div>
-              <div className="evidence-item">
-                <span className="evidence-label">Evidentiary Citation:</span>
-                <span className="evidence-value text-primary font-mono">{protocol.evidence}</span>
-              </div>
-            </div>
-
-            {/* Action Checklist */}
-            <div className="playbook-checklist-section">
-              <h4 className="checklist-heading">Actionable Enforcement Checklist:</h4>
-              <div className="checklist-items-list">
-                {protocol.actions.map((act, aIdx) => {
-                  const key = `${protocol.id}-${aIdx}`;
-                  const isDone = !!completedTasks[key];
-                  return (
-                    <label
-                      key={aIdx}
-                      className={`checklist-item-row ${isDone ? 'done' : ''}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isDone}
-                        onChange={() => toggleTask(key)}
-                        className="checklist-checkbox"
-                      />
-                      <span className="checklist-text">{act}</span>
-                      {isDone && <CheckCircle2 size={16} className="text-primary ml-auto shrink-0" />}
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Statutory Authority Notice */}
-            <div className="playbook-statutory-notice">
-              <FileCheck size={15} className="text-primary shrink-0" />
-              <span>{protocol.statutoryNotice}</span>
+            <div className="playbook-target-location">
+              <Icon size={14} className="text-secondary" aria-hidden="true" />
+              <span>Audience: <strong>{persona.label}</strong></span>
             </div>
           </div>
-        ))}
+
+          <h2 id="guidance-heading" className="playbook-title">{persona.label} considerations</h2>
+          <div className="playbook-evidence-strip">
+            <div className="evidence-item">
+              <span className="evidence-label">Calculated evidence:</span>
+              <span className="evidence-value text-primary font-mono">{evidence.join(' · ')}</span>
+            </div>
+            <div className="evidence-item">
+              <span className="evidence-label">Observed peak window:</span>
+              <span className="evidence-value">{analytics?.peakExposureWindow || 'Unavailable'}</span>
+            </div>
+          </div>
+
+          <div className="playbook-checklist-section">
+            <h3 className="checklist-heading">Review checklist (marking an item does not execute an action)</h3>
+            <div className="checklist-items-list">
+              {actions.map((action, index) => {
+                const key = `${activePersona}-${index}`;
+                return (
+                  <label key={key} className={`checklist-item-row ${reviewedTasks[key] ? 'done' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(reviewedTasks[key])}
+                      onChange={() => toggleReviewed(index)}
+                      className="checklist-checkbox"
+                    />
+                    <span className="checklist-text">{action}</span>
+                    {reviewedTasks[key] && <CheckCircle2 size={16} className="text-primary ml-auto shrink-0" aria-hidden="true" />}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="playbook-statutory-notice" role="note">
+            <FileCheck size={15} className="text-primary shrink-0" aria-hidden="true" />
+            <span>
+              AQI qualification: {analytics?.aqi?.coverageNote || 'No calculated AQI qualification is available.'}
+              {' '}Historical association does not establish cause or intervention effectiveness.
+            </span>
+          </div>
+        </article>
       </section>
     </div>
   );

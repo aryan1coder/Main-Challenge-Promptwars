@@ -25,6 +25,8 @@ const GAS_CONVERSIONS_PPM_TO_UGM3 = {
   co: 1145.6,
   o3: 1963.2
 };
+const MAX_INPUT_CHARACTERS = 5_000_000;
+const MAX_OBSERVATION_ROWS = 50_000;
 
 /**
  * Autodetect delimiter from the first few lines of tabular text.
@@ -90,6 +92,9 @@ export function parseAirQualityData(rawText) {
   if (!rawText || typeof rawText !== 'string' || !rawText.trim()) {
     throw new Error('Input data is empty. Please upload a valid CSV or paste data.');
   }
+  if (rawText.length > MAX_INPUT_CHARACTERS) {
+    throw new Error('Input data exceeds the 5 MB text limit. Split it into smaller datasets.');
+  }
 
   // Strip UTF-8 BOM if present
   let cleanText = rawText.charCodeAt(0) === 0xFEFF ? rawText.slice(1) : rawText;
@@ -97,6 +102,9 @@ export function parseAirQualityData(rawText) {
   const lines = cleanText.split(/\r?\n/).filter(line => line.trim().length > 0 && !line.trim().startsWith('#'));
   if (lines.length < 2) {
     throw new Error('Data must contain at least a header row and one row of observations.');
+  }
+  if (lines.length - 1 > MAX_OBSERVATION_ROWS) {
+    throw new Error(`Input exceeds the ${MAX_OBSERVATION_ROWS} observation limit.`);
   }
 
   const delimiter = detectDelimiter(cleanText);
@@ -159,8 +167,8 @@ export function parseAirQualityData(rawText) {
 
       // Check coordinates
       if (canonical === 'latitude' || canonical === 'longitude') {
-        const num = parseFloat(val);
-        if (isNaN(num)) {
+        const num = Number(val);
+        if (!Number.isFinite(num)) {
           rowObj[canonical] = null;
         } else if (canonical === 'latitude' && (num < -90 || num > 90)) {
           rowObj[canonical] = null;
@@ -176,8 +184,8 @@ export function parseAirQualityData(rawText) {
 
       // Check numeric metrics
       if (['pm25', 'pm10', 'no2', 'so2', 'co', 'o3'].includes(canonical)) {
-        const num = parseFloat(val);
-        if (isNaN(num)) {
+        const num = Number(val);
+        if (!Number.isFinite(num)) {
           rowObj[canonical] = null;
           if (missingCounts[canonical] !== undefined) missingCounts[canonical]++;
           rowObj._flags.push(`Non-numeric value in ${canonical}: "${val}"`);
